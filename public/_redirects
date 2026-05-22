@@ -1,1 +1,2 @@
-/* /index.html 200
+# SPA fallback — all routes return index.html with 200
+/*    /index.html    200

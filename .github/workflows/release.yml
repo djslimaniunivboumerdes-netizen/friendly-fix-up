@@ -1,0 +1,76 @@
+name: Build & Release All Platforms
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: "20", cache: "npm" }
+      - run: npm ci
+      - name: Build Vite
+        run: npm run build
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY }}
+          VITE_SUPABASE_PROJECT_ID: ${{ secrets.VITE_SUPABASE_PROJECT_ID }}
+      - name: Build EXE
+        run: npm run electron:build:win
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/upload-artifact@v4
+        with: { name: windows-exe, path: release/*.exe, retention-days: 30 }
+
+  build-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: "20", cache: "npm" }
+      - run: npm ci
+      - name: Build Vite
+        run: npm run build
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY }}
+          VITE_SUPABASE_PROJECT_ID: ${{ secrets.VITE_SUPABASE_PROJECT_ID }}
+      - name: Build AppImage
+        run: npm run electron:build:linux
+      - uses: actions/upload-artifact@v4
+        with: { name: linux-appimage, path: release/*.AppImage, retention-days: 30 }
+
+  create-release:
+    needs: [build-windows, build-linux]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with: { name: windows-exe, path: ./release-assets/ }
+      - uses: actions/download-artifact@v4
+        with: { name: linux-appimage, path: ./release-assets/ }
+      - id: ver
+        run: echo "version=$(node -p \"require('./package.json').version\")" >> $GITHUB_OUTPUT
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.ver.outputs.version }}
+          name: "GNL1Z v${{ steps.ver.outputs.version }}"
+          body: |
+            ## GNL1Z Asset Management — Sonatrach Arzew
+
+            | Platform | Download |
+            |---|---|
+            | 🤖 Android | `GNL1Z-Android.apk` (attach manually) |
+            | 🪟 Windows | `GNL1Z-Setup-*.exe` |
+            | 🐧 Linux | `GNL1Z-*.AppImage` |
+            | 🌐 Web | [Open in browser](https://gnl1z-sonatrach.YOUR-SUBDOMAIN.workers.dev) |
+
+            **Android install:** Download APK → Settings → Allow Unknown Sources → Install
+          files: ./release-assets/*
+          draft: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
