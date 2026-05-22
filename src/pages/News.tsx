@@ -10,38 +10,48 @@ import { useI18n } from "@/contexts/I18nContext";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 
-/* ─── Types ─── */
-interface NewsItem {
-  title: string;
-  url: string;
-  source: string;
-  published: string;
-  summary?: string;
-  sentiment?: "positive" | "neutral" | "negative";
-}
-interface PricePoint {
-  date: string;
-  value: number;
-}
-interface StatCard {
+/* ─── Types matching edge function output ─── */
+interface PriceItem {
   label: string;
   value: string;
+  unit: string;
+  trend: "up" | "down" | "flat";
   change?: string;
+  note?: string;
+}
+
+interface StatItem {
+  label: string;
+  value: string;
+  unit: string;
   trend?: "up" | "down" | "flat";
 }
+
+interface NewsItem {
+  title: string;
+  title_fr: string;
+  summary: string;
+  summary_fr: string;
+  date: string;
+  source: string;
+  url: string;
+  category: string;
+}
+
 interface NewsData {
-  lng_prices: PricePoint[];
-  sonatrach_prices: PricePoint[];
-  lng_stats: StatCard[];
-  sonatrach_stats: StatCard[];
+  lng_prices: PriceItem[];
+  sonatrach_prices: PriceItem[];
+  lng_stats: StatItem[];
+  sonatrach_stats: StatItem[];
   lng_news: NewsItem[];
   sonatrach_news: NewsItem[];
   fetched_at: string;
+  _cache_hit?: boolean;
+  _cache_age_h?: number;
 }
 
 /* ─── Constants ─── */
 const CACHE_TTL_MS = 5 * 24 * 60 * 60 * 1000; // 5 days
-const CACHE_KEY = "news_cache";
 
 /* ─── Helpers ─── */
 function formatAge(ms: number): string {
@@ -66,7 +76,7 @@ async function loadFromCache(): Promise<{ data: NewsData; ageMs: number } | null
   }
 }
 
-/* FIX: Safe fetch that never crashes the page */
+/* Safe fetch that never crashes the page */
 async function safeFetchWithSearch(
   signal: AbortSignal,
   force = false
@@ -109,6 +119,11 @@ async function safeFetchWithSearch(
   } catch (e) {
     // 3. Final fallback: return empty data so UI doesn't crash
     console.error("News fetch failed:", e);
+    toast({
+      title: "News load failed",
+      description: e instanceof Error ? e.message : "Unknown error",
+      variant: "destructive",
+    });
     return {
       data: {
         lng_prices: [],
@@ -123,29 +138,6 @@ async function safeFetchWithSearch(
       ageMs: 0,
     };
   }
-}
-
-/* ─── Mini chart (SVG sparkline) ─── */
-function Sparkline({ data, color = "#10b981" }: { data: PricePoint[]; color?: string }) {
-  if (!data.length) return <div className="h-16 bg-muted/30 rounded" />;
-  const vals = data.map((d) => d.value);
-  const min = Math.min(...vals);
-  const max = Math.max(...vals);
-  const range = max - min || 1;
-  const w = 300;
-  const h = 64;
-  const points = data
-    .map((d, i) => {
-      const x = (i / (data.length - 1)) * w;
-      const y = h - ((d.value - min) / range) * h;
-      return `${x},${y}`;
-    })
-    .join(" ");
-  return (
-    <svg viewBox={`0 0 ${w} ${h}`} className="w-full h-16">
-      <polyline fill="none" stroke={color} strokeWidth="2" points={points} />
-    </svg>
-  );
 }
 
 /* ─── Page ─── */
@@ -193,12 +185,14 @@ export default function News() {
   const filteredLng = (data?.lng_news ?? []).filter(
     (n) =>
       n.title.toLowerCase().includes(q.toLowerCase()) ||
-      n.summary?.toLowerCase().includes(q.toLowerCase())
+      n.summary.toLowerCase().includes(q.toLowerCase()) ||
+      n.title_fr.toLowerCase().includes(q.toLowerCase())
   );
   const filteredSonatrach = (data?.sonatrach_news ?? []).filter(
     (n) =>
       n.title.toLowerCase().includes(q.toLowerCase()) ||
-      n.summary?.toLowerCase().includes(q.toLowerCase())
+      n.summary.toLowerCase().includes(q.toLowerCase()) ||
+      n.title_fr.toLowerCase().includes(q.toLowerCase())
   );
 
   return (
@@ -283,10 +277,10 @@ export default function News() {
                     {data.lng_stats.map((s) => (
                       <div key={s.label} className="border border-border rounded p-3">
                         <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-mono">{s.label}</div>
-                        <div className="text-xl font-display font-bold mt-1">{s.value}</div>
-                        {s.change && (
+                        <div className="text-xl font-display font-bold mt-1">{s.value} <span className="text-sm font-normal text-muted-foreground">{s.unit}</span></div>
+                        {s.trend && (
                           <div className={`text-xs font-mono mt-0.5 ${s.trend === "up" ? "text-emerald-500" : s.trend === "down" ? "text-rose-500" : "text-muted-foreground"}`}>
-                            {s.change}
+                            {s.trend === "up" ? "▲" : s.trend === "down" ? "▼" : "—"}
                           </div>
                         )}
                       </div>
@@ -313,10 +307,10 @@ export default function News() {
                     {data.sonatrach_stats.map((s) => (
                       <div key={s.label} className="border border-border rounded p-3">
                         <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-mono">{s.label}</div>
-                        <div className="text-xl font-display font-bold mt-1">{s.value}</div>
-                        {s.change && (
+                        <div className="text-xl font-display font-bold mt-1">{s.value} <span className="text-sm font-normal text-muted-foreground">{s.unit}</span></div>
+                        {s.trend && (
                           <div className={`text-xs font-mono mt-0.5 ${s.trend === "up" ? "text-emerald-500" : s.trend === "down" ? "text-rose-500" : "text-muted-foreground"}`}>
-                            {s.change}
+                            {s.trend === "up" ? "▲" : s.trend === "down" ? "▼" : "—"}
                           </div>
                         )}
                       </div>
@@ -334,23 +328,21 @@ export default function News() {
                 </h3>
                 {filteredLng.slice(0, 5).map((n) => (
                   <a
-                    key={n.url}
-                    href={n.url}
+                    key={n.url + n.title}
+                    href={n.url || "#"}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="block border-b border-border last:border-0 py-3 hover:bg-accent/5 transition-colors"
                   >
                     <div className="flex items-start justify-between gap-2">
                       <div>
-                        <div className="text-sm font-medium line-clamp-2">{n.title}</div>
+                        <div className="text-sm font-medium line-clamp-2">{lang === "en" ? n.title : n.title_fr || n.title}</div>
                         <div className="flex items-center gap-2 mt-1">
                           <Badge variant="outline" className="text-[10px] font-mono">{n.source}</Badge>
-                          <span className="text-[10px] text-muted-foreground font-mono">{n.published}</span>
+                          <span className="text-[10px] text-muted-foreground font-mono">{n.date}</span>
+                          <Badge variant="secondary" className="text-[10px]">{n.category}</Badge>
                         </div>
                       </div>
-                      {n.sentiment && (
-                        <span className={`shrink-0 w-2 h-2 rounded-full ${n.sentiment === "positive" ? "bg-emerald-500" : n.sentiment === "negative" ? "bg-rose-500" : "bg-amber-500"}`} />
-                      )}
                     </div>
                   </a>
                 ))}
@@ -365,23 +357,21 @@ export default function News() {
                 </h3>
                 {filteredSonatrach.slice(0, 5).map((n) => (
                   <a
-                    key={n.url}
-                    href={n.url}
+                    key={n.url + n.title}
+                    href={n.url || "#"}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="block border-b border-border last:border-0 py-3 hover:bg-accent/5 transition-colors"
                   >
                     <div className="flex items-start justify-between gap-2">
                       <div>
-                        <div className="text-sm font-medium line-clamp-2">{n.title}</div>
+                        <div className="text-sm font-medium line-clamp-2">{lang === "en" ? n.title : n.title_fr || n.title}</div>
                         <div className="flex items-center gap-2 mt-1">
                           <Badge variant="outline" className="text-[10px] font-mono">{n.source}</Badge>
-                          <span className="text-[10px] text-muted-foreground font-mono">{n.published}</span>
+                          <span className="text-[10px] text-muted-foreground font-mono">{n.date}</span>
+                          <Badge variant="secondary" className="text-[10px]">{n.category}</Badge>
                         </div>
                       </div>
-                      {n.sentiment && (
-                        <span className={`shrink-0 w-2 h-2 rounded-full ${n.sentiment === "positive" ? "bg-emerald-500" : n.sentiment === "negative" ? "bg-rose-500" : "bg-amber-500"}`} />
-                      )}
                     </div>
                   </a>
                 ))}
@@ -394,11 +384,12 @@ export default function News() {
 
           {/* ─── LNG Market ─── */}
           <TabsContent value="lng" className="space-y-6">
+            {/* LNG Prices */}
             <div className="border border-border rounded-lg bg-card p-5">
               <div className="flex items-center gap-2 mb-3">
                 <TrendingUp className="h-4 w-4 text-accent" />
                 <h2 className="font-display font-semibold text-sm uppercase tracking-wider">
-                  {lang === "en" ? "LNG Price Trend" : "Tendance Prix GNL"}
+                  {lang === "en" ? "LNG Prices" : "Prix GNL"}
                 </h2>
               </div>
               {data.lng_prices.length === 0 ? (
@@ -407,33 +398,46 @@ export default function News() {
                   {lang === "en" ? "No price data available" : "Aucune donnée de prix disponible"}
                 </div>
               ) : (
-                <Sparkline data={data.lng_prices} />
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {data.lng_prices.map((p) => (
+                    <div key={p.label} className="border border-border rounded p-4">
+                      <div className="flex items-center justify-between">
+                        <span className="font-medium text-sm">{p.label}</span>
+                        <Badge variant="outline" className="text-[10px] font-mono">{p.note}</Badge>
+                      </div>
+                      <div className="text-2xl font-display font-bold mt-2">{p.value} <span className="text-sm font-normal text-muted-foreground">{p.unit}</span></div>
+                      {p.change && (
+                        <div className={`text-xs font-mono mt-1 ${p.trend === "up" ? "text-emerald-500" : p.trend === "down" ? "text-rose-500" : "text-muted-foreground"}`}>
+                          {p.trend === "up" ? "▲" : p.trend === "down" ? "▼" : "—"} {p.change}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
               )}
             </div>
+
+            {/* LNG News */}
             <div className="border border-border rounded-lg bg-card p-5">
               <h2 className="font-display font-semibold text-sm uppercase tracking-wider mb-3">
                 {lang === "en" ? "LNG News" : "Actualités GNL"}
               </h2>
               {filteredLng.map((n) => (
                 <a
-                  key={n.url}
-                  href={n.url}
+                  key={n.url + n.title}
+                  href={n.url || "#"}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="block border-b border-border last:border-0 py-4 hover:bg-accent/5 transition-colors"
                 >
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <div className="font-medium">{n.title}</div>
-                      {n.summary && <div className="text-sm text-muted-foreground mt-1 line-clamp-2">{n.summary}</div>}
-                      <div className="flex items-center gap-2 mt-2">
-                        <Badge variant="outline" className="text-[10px] font-mono">{n.source}</Badge>
-                        <span className="text-[10px] text-muted-foreground font-mono">{n.published}</span>
-                      </div>
+                  <div>
+                    <div className="font-medium">{lang === "en" ? n.title : n.title_fr || n.title}</div>
+                    <div className="text-sm text-muted-foreground mt-1 line-clamp-2">{lang === "en" ? n.summary : n.summary_fr || n.summary}</div>
+                    <div className="flex items-center gap-2 mt-2">
+                      <Badge variant="outline" className="text-[10px] font-mono">{n.source}</Badge>
+                      <span className="text-[10px] text-muted-foreground font-mono">{n.date}</span>
+                      <Badge variant="secondary" className="text-[10px]">{n.category}</Badge>
                     </div>
-                    {n.sentiment && (
-                      <span className={`shrink-0 w-2 h-2 rounded-full mt-1 ${n.sentiment === "positive" ? "bg-emerald-500" : n.sentiment === "negative" ? "bg-rose-500" : "bg-amber-500"}`} />
-                    )}
                   </div>
                 </a>
               ))}
@@ -445,11 +449,12 @@ export default function News() {
 
           {/* ─── Sonatrach ─── */}
           <TabsContent value="sonatrach" className="space-y-6">
+            {/* Sonatrach Prices */}
             <div className="border border-border rounded-lg bg-card p-5">
               <div className="flex items-center gap-2 mb-3">
                 <TrendingUp className="h-4 w-4 text-accent" />
                 <h2 className="font-display font-semibold text-sm uppercase tracking-wider">
-                  {lang === "en" ? "Sonatrach Price Trend" : "Tendance Prix Sonatrach"}
+                  {lang === "en" ? "Sonatrach Prices" : "Prix Sonatrach"}
                 </h2>
               </div>
               {data.sonatrach_prices.length === 0 ? (
@@ -458,31 +463,44 @@ export default function News() {
                   {lang === "en" ? "No price data available" : "Aucune donnée de prix disponible"}
                 </div>
               ) : (
-                <Sparkline data={data.sonatrach_prices} color="#3b82f6" />
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {data.sonatrach_prices.map((p) => (
+                    <div key={p.label} className="border border-border rounded p-4">
+                      <div className="flex items-center justify-between">
+                        <span className="font-medium text-sm">{p.label}</span>
+                        <Badge variant="outline" className="text-[10px] font-mono">{p.note}</Badge>
+                      </div>
+                      <div className="text-2xl font-display font-bold mt-2">{p.value} <span className="text-sm font-normal text-muted-foreground">{p.unit}</span></div>
+                      {p.change && (
+                        <div className={`text-xs font-mono mt-1 ${p.trend === "up" ? "text-emerald-500" : p.trend === "down" ? "text-rose-500" : "text-muted-foreground"}`}>
+                          {p.trend === "up" ? "▲" : p.trend === "down" ? "▼" : "—"} {p.change}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
               )}
             </div>
+
+            {/* Sonatrach News */}
             <div className="border border-border rounded-lg bg-card p-5">
               <h2 className="font-display font-semibold text-sm uppercase tracking-wider mb-3">Sonatrach News</h2>
               {filteredSonatrach.map((n) => (
                 <a
-                  key={n.url}
-                  href={n.url}
+                  key={n.url + n.title}
+                  href={n.url || "#"}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="block border-b border-border last:border-0 py-4 hover:bg-accent/5 transition-colors"
                 >
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <div className="font-medium">{n.title}</div>
-                      {n.summary && <div className="text-sm text-muted-foreground mt-1 line-clamp-2">{n.summary}</div>}
-                      <div className="flex items-center gap-2 mt-2">
-                        <Badge variant="outline" className="text-[10px] font-mono">{n.source}</Badge>
-                        <span className="text-[10px] text-muted-foreground font-mono">{n.published}</span>
-                      </div>
+                  <div>
+                    <div className="font-medium">{lang === "en" ? n.title : n.title_fr || n.title}</div>
+                    <div className="text-sm text-muted-foreground mt-1 line-clamp-2">{lang === "en" ? n.summary : n.summary_fr || n.summary}</div>
+                    <div className="flex items-center gap-2 mt-2">
+                      <Badge variant="outline" className="text-[10px] font-mono">{n.source}</Badge>
+                      <span className="text-[10px] text-muted-foreground font-mono">{n.date}</span>
+                      <Badge variant="secondary" className="text-[10px]">{n.category}</Badge>
                     </div>
-                    {n.sentiment && (
-                      <span className={`shrink-0 w-2 h-2 rounded-full mt-1 ${n.sentiment === "positive" ? "bg-emerald-500" : n.sentiment === "negative" ? "bg-rose-500" : "bg-amber-500"}`} />
-                    )}
                   </div>
                 </a>
               ))}
@@ -508,16 +526,27 @@ export default function News() {
                     {lang === "en" ? "No price data available" : "Aucune donnée de prix disponible"}
                   </div>
                 ) : (
-                  <div className="space-y-2">
-                    {data.lng_prices.slice(-10).map((p) => (
-                      <div key={p.date} className="flex justify-between text-sm border-b border-border last:border-0 py-2">
-                        <span className="font-mono text-muted-foreground">{p.date}</span>
-                        <span className="font-semibold">{p.value}</span>
+                  <div className="space-y-3">
+                    {data.lng_prices.map((p) => (
+                      <div key={p.label} className="flex items-center justify-between border-b border-border last:border-0 py-3">
+                        <div>
+                          <div className="font-medium text-sm">{p.label}</div>
+                          <div className="text-xs text-muted-foreground">{p.note}</div>
+                        </div>
+                        <div className="text-right">
+                          <div className="font-display font-bold">{p.value} {p.unit}</div>
+                          {p.change && (
+                            <div className={`text-xs font-mono ${p.trend === "up" ? "text-emerald-500" : p.trend === "down" ? "text-rose-500" : "text-muted-foreground"}`}>
+                              {p.trend === "up" ? "▲" : p.trend === "down" ? "▼" : "—"} {p.change}
+                            </div>
+                          )}
+                        </div>
                       </div>
                     ))}
                   </div>
                 )}
               </div>
+
               <div className="border border-border rounded-lg bg-card p-5">
                 <div className="flex items-center gap-2 mb-3">
                   <TrendingUp className="h-4 w-4 text-accent" />
@@ -531,11 +560,21 @@ export default function News() {
                     {lang === "en" ? "No price data available" : "Aucune donnée de prix disponible"}
                   </div>
                 ) : (
-                  <div className="space-y-2">
-                    {data.sonatrach_prices.slice(-10).map((p) => (
-                      <div key={p.date} className="flex justify-between text-sm border-b border-border last:border-0 py-2">
-                        <span className="font-mono text-muted-foreground">{p.date}</span>
-                        <span className="font-semibold">{p.value}</span>
+                  <div className="space-y-3">
+                    {data.sonatrach_prices.map((p) => (
+                      <div key={p.label} className="flex items-center justify-between border-b border-border last:border-0 py-3">
+                        <div>
+                          <div className="font-medium text-sm">{p.label}</div>
+                          <div className="text-xs text-muted-foreground">{p.note}</div>
+                        </div>
+                        <div className="text-right">
+                          <div className="font-display font-bold">{p.value} {p.unit}</div>
+                          {p.change && (
+                            <div className={`text-xs font-mono ${p.trend === "up" ? "text-emerald-500" : p.trend === "down" ? "text-rose-500" : "text-muted-foreground"}`}>
+                              {p.trend === "up" ? "▲" : p.trend === "down" ? "▼" : "—"} {p.change}
+                            </div>
+                          )}
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -547,4 +586,4 @@ export default function News() {
       )}
     </div>
   );
-        }
+}
