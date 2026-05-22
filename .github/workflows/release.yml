@@ -5,22 +5,30 @@ on:
     tags: ["v*"]
   workflow_dispatch:
 
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
 jobs:
   build-windows:
     runs-on: windows-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with: { node-version: "20", cache: "npm" }
-      - run: npm ci
-      - name: Build Vite
-        run: npm run build
+      - uses: oven-sh/setup-bun@v2
+        with: { bun-version: latest }
+      - run: bun install --frozen-lockfile
+      - name: Build Vite (electron base)
+        run: bun run build:electron
         env:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY }}
           VITE_SUPABASE_PROJECT_ID: ${{ secrets.VITE_SUPABASE_PROJECT_ID }}
       - name: Build EXE
-        run: npm run electron:build:win
+        run: bunx electron-builder --win --x64 --publish never
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - uses: actions/upload-artifact@v4
@@ -28,19 +36,20 @@ jobs:
 
   build-linux:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with: { node-version: "20", cache: "npm" }
-      - run: npm ci
-      - name: Build Vite
-        run: npm run build
+      - uses: oven-sh/setup-bun@v2
+        with: { bun-version: latest }
+      - run: bun install --frozen-lockfile
+      - name: Build Vite (electron base)
+        run: bun run build:electron
         env:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY }}
           VITE_SUPABASE_PROJECT_ID: ${{ secrets.VITE_SUPABASE_PROJECT_ID }}
       - name: Build AppImage
-        run: npm run electron:build:linux
+        run: bunx electron-builder --linux --publish never
       - uses: actions/upload-artifact@v4
         with: { name: linux-appimage, path: release/*.AppImage, retention-days: 30 }
 
@@ -64,13 +73,14 @@ jobs:
 
             | Platform | Download |
             |---|---|
-            | 🤖 Android | `GNL1Z-Android.apk` (attach manually) |
-            | 🪟 Windows | `GNL1Z-Setup-*.exe` |
-            | 🐧 Linux | `GNL1Z-*.AppImage` |
-            | 🌐 Web | [Open in browser](https://gnl1z-sonatrach.YOUR-SUBDOMAIN.workers.dev) |
+            | Android | `GNL1Z-Android.apk` (attach manually) |
+            | Windows | `GNL1Z-Setup-*.exe` |
+            | Linux   | `GNL1Z-*.AppImage` |
+            | Web     | https://gnl1z-sonatrach.workers.dev |
 
             **Android install:** Download APK → Settings → Allow Unknown Sources → Install
           files: ./release-assets/*
           draft: false
+          generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

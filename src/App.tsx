@@ -16,6 +16,7 @@ import Manuals from "./pages/Manuals";
 import ProcessFlow from "./pages/ProcessFlow";
 import News from "./pages/News";
 import Author from "./pages/Author";
+import DownloadPage from "./pages/DownloadPage";
 import NotFound from "./pages/NotFound.tsx";
 
 const queryClient = new QueryClient();
@@ -40,6 +41,7 @@ const App = () => (
                 <Route path="/flow" element={<ProcessFlow />} />
                 <Route path="/news" element={<News />} />
                 <Route path="/author" element={<Author />} />
+                <Route path="/download" element={<DownloadPage lang="en" />} />
                 <Route path="*" element={<NotFound />} />
               </Route>
             </Routes>
