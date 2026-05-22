@@ -1,7 +1,10 @@
+/// <reference types="@cloudflare/workers-types" />
+
 /**
  * Cloudflare Worker — serves the GNL1Z React SPA.
  * Handles SPA routing fallback, caching, and security headers.
  */
+
 
 export interface Env {
   ASSETS: Fetcher;

@@ -334,7 +334,7 @@ const CACHE_TTL_MS  = 5 * 24 * 60 * 60 * 1000;   // 5 days
 const STALE_TTL_MS  = 7 * 24 * 60 * 60 * 1000;   // show stale up to 7 days
 
 async function loadFromCache(): Promise<{ data: NewsData; ageMs: number } | null> {
-  const { data: row, error } = await supabase
+  const { data: row, error } = await (supabase as any)
     .from("news_cache")
     .select("data, fetched_at")
     .eq("id", "singleton")
@@ -478,7 +478,7 @@ export default function News() {
             <p className="font-display font-semibold text-base">{lang === "en" ? "Ready to fetch" : "Prêt à récupérer"}</p>
             <p className="text-sm text-muted-foreground mt-1 max-w-xs">{lang === "en" ? "Click Refresh to pull current LNG prices and Sonatrach news." : "Cliquez sur Actualiser pour récupérer les prix GNL et l'actualité Sonatrach."}</p>
           </div>
-          <Button onClick={fetchNews} size="lg" className="gap-2 bg-accent text-accent-foreground hover:bg-accent/90 font-bold">
+          <Button onClick={() => fetchNews()} size="lg" className="gap-2 bg-accent text-accent-foreground hover:bg-accent/90 font-bold">
             <RefreshCw className="h-4 w-4" />{lang === "en" ? "Fetch now" : "Récupérer maintenant"}
           </Button>
         </div>
