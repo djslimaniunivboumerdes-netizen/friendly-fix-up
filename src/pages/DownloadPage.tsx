@@ -165,7 +165,10 @@ export default function DownloadPage({ lang = "en" }: { lang?: "en" | "fr" }) {
   useEffect(() => {
     fetch(`https://api.github.com/repos/${GITHUB_REPO}/releases/latest`)
       .then(r => r.json())
-      .then(d => { if (d.tag_name) setRelease(d); })
+      .then((d: unknown) => { 
+        const data = d as Record<string, unknown>;
+        if (data.tag_name) setRelease(data as Release); 
+      })
       .catch(() => {})
       .finally(() => setLoading(false));
   }, []);
