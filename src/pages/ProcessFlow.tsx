@@ -1,0 +1,514 @@
+import { useMemo, useState } from "react";
+import { useI18n } from "@/contexts/I18nContext";
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { X, ZoomIn, ZoomOut, Maximize2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+
+const ACCENT = "#f97316";
+
+type Category =
+  | "absorber" | "exchanger" | "compressor" | "column" | "drum"
+  | "turbine" | "pump" | "reactor" | "storage";
+
+interface Node {
+  id: string;          // GNL1Z tag (e.g. 101-F501)
+  x: number; y: number;
+  label: string;       // short label drawn inside circle
+  category: Category;
+  section: "decarb" | "dehydr" | "demerc" | "cooling" | "liquef" | "fract" | "fuel" | "storage";
+  name: { en: string; fr: string };
+  description: { en: string; fr: string };
+  specs: { label: string; value: string }[];
+}
+
+// GNL1Z plant colour code (per Sonatrach legend on the general process map):
+//   Green G8/G12 = LNG / natural gas service · Purple = N₂ / instrument air
+//   Blue G1 = cooling water · Yellow GN = natural gas inlet · Red = fuel/turbine
+const CAT: Record<Category, { en: string; fr: string; color: string }> = {
+  absorber:   { en: "Absorber (LNG svc)",   fr: "Absorbeur (svc GNL)", color: "#10b981" }, // green G8
+  exchanger:  { en: "Heat Exchanger",       fr: "Échangeur",           color: "#06b6d4" },
+  compressor: { en: "Compressor",           fr: "Compresseur",         color: "#a855f7" },
+  column:     { en: "Fractionation Column", fr: "Colonne",             color: "#22c55e" }, // green LNG svc
+  drum:       { en: "Drum / Vessel",        fr: "Capacité",            color: "#eab308" }, // yellow GN
+  turbine:    { en: "Gas Turbine",          fr: "Turbine",             color: "#ef4444" },
+  pump:       { en: "Pump",                 fr: "Pompe",               color: "#ec4899" },
+  reactor:    { en: "Reactor (N₂ purge)",   fr: "Réacteur (purge N₂)", color: "#a855f7" }, // purple
+  storage:    { en: "Storage",              fr: "Stockage",            color: "#94a3b8" },
+};
+
+const SECTION: Record<Node["section"], { en: string; fr: string }> = {
+  decarb:  { en: "Decarbonation (MEA)",      fr: "Décarbonatation (MEA)" },
+  dehydr:  { en: "Dehydration",              fr: "Déshydratation" },
+  demerc:  { en: "Mercury Removal",          fr: "Démercurisation" },
+  cooling: { en: "Propane Pre-Cooling",      fr: "Pré-refroidissement Propane" },
+  liquef:  { en: "Liquefaction (MCR)",       fr: "Liquéfaction (MCR)" },
+  fract:   { en: "Fractionation",            fr: "Fractionnement" },
+  fuel:    { en: "Fuel Gas",                 fr: "Gaz Combustible" },
+  storage: { en: "LNG Storage & Loading",    fr: "Stockage & Chargement GNL" },
+};
+
+// Layout based on the GNL1Z "Vue Générale du Procédé" mimic
+const NODES: Node[] = [
+  // --- Decarbonation (top-left)
+  { id: "101-F501", x: 6, y: 38, label: "F501", category: "absorber", section: "decarb",
+    name: { en: "MEA CO₂ Absorber", fr: "Absorbeur CO₂ MEA" },
+    description: {
+      en: "Counter-current MEA absorber removing CO₂ from feed gas to <50 ppmv before cryogenic stages.",
+      fr: "Absorbeur MEA contre-courant éliminant le CO₂ du gaz d'alimentation à <50 ppmv avant les étages cryogéniques.",
+    },
+    specs: [{ label: "Service", value: "Amine treating" }, { label: "Pressure", value: "48 bar" }, { label: "Diameter", value: '120"' }, { label: "Height", value: "32 m" }],
+  },
+  { id: "101-F502", x: 14, y: 18, label: "F502", category: "column", section: "decarb",
+    name: { en: "MEA Regenerator", fr: "Régénérateur MEA" },
+    description: { en: "Steam-stripped regenerator returning lean amine to the absorber.", fr: "Régénérateur stripé vapeur renvoyant l'amine pauvre vers l'absorbeur." },
+    specs: [{ label: "Reboiler duty", value: "18 MW" }, { label: "Top T", value: "100 °C" }],
+  },
+  { id: "101-G-507", x: 6, y: 64, label: "G507", category: "drum", section: "decarb",
+    name: { en: "Rich Amine Flash Drum", fr: "Ballon de Détente Amine Riche" },
+    description: { en: "Flashes dissolved hydrocarbons from rich MEA before regeneration.", fr: "Détend les hydrocarbures dissous de la MEA riche avant régénération." },
+    specs: [{ label: "Pressure", value: "5 bar" }],
+  },
+
+  // --- Dehydration (mol-sieve beds)
+  { id: "102-G07.87", x: 22, y: 14, label: "G07.87", category: "drum", section: "dehydr",
+    name: { en: "Dehydration Inlet KO Drum", fr: "Ballon Séparateur Déshydratation" },
+    description: { en: "Removes free liquids upstream of mol-sieve beds.", fr: "Élimine les liquides libres en amont des tamis moléculaires." },
+    specs: [{ label: "Pressure", value: "47 bar" }],
+  },
+  { id: "102-R03.10", x: 22, y: 32, label: "R03.10", category: "reactor", section: "dehydr",
+    name: { en: "Mol-Sieve Bed A", fr: "Tamis Moléculaire A" },
+    description: { en: "Adsorption of water on 4Å molecular sieves to <1 ppmv H₂O.", fr: "Adsorption d'eau sur tamis 4Å (<1 ppmv H₂O)." },
+    specs: [{ label: "Cycle", value: "8 h" }, { label: "Regen T", value: "280 °C" }],
+  },
+  { id: "102-R03.11", x: 30, y: 32, label: "R03.11", category: "reactor", section: "dehydr",
+    name: { en: "Mol-Sieve Bed B", fr: "Tamis Moléculaire B" },
+    description: { en: "Parallel adsorber bed (rotating cycle: ads / regen / cool).", fr: "Lit adsorbeur parallèle (cycle: ads / régén / refroidissement)." },
+    specs: [{ label: "Cycle", value: "8 h" }],
+  },
+
+  // --- Mercury removal
+  { id: "102-R03.12", x: 38, y: 28, label: "R03.12", category: "reactor", section: "demerc",
+    name: { en: "Mercury Guard Bed", fr: "Lit de Démercurisation" },
+    description: { en: "Sulphur-impregnated activated-carbon bed removing Hg to <0.01 µg/Nm³.", fr: "Lit charbon actif soufré éliminant le Hg à <0,01 µg/Nm³." },
+    specs: [{ label: "Outlet Hg", value: "<0.01 µg/Nm³" }],
+  },
+
+  // --- Propane pre-cooling
+  { id: "104-E05.20", x: 46, y: 22, label: "E05.20", category: "exchanger", section: "cooling",
+    name: { en: "Feed Gas / Propane Chiller", fr: "Chiller Gaz / Propane" },
+    description: { en: "Kettle-type chiller cools dry feed gas with propane refrigerant.", fr: "Chiller type kettle refroidissant le gaz sec via propane." },
+    specs: [{ label: "Outlet T", value: "−35 °C" }, { label: "Duty", value: "85 MW" }],
+  },
+  { id: "104-E07.11", x: 52, y: 14, label: "E07.11", category: "exchanger", section: "cooling",
+    name: { en: "Propane Aftercooler (CW)", fr: "Aéroréfrigérant Propane (Eau)" },
+    description: { en: "Cooling-water aftercooler condensing HP propane discharge before the accumulator.", fr: "Aéroréfrigérant à eau condensant le refoulement HP propane avant l'accumulateur." },
+    specs: [{ label: "Service", value: "CW G1" }, { label: "Duty", value: "60 MW" }, { label: "Outlet T", value: "38 °C" }],
+  },
+  { id: "104-F07.11", x: 38, y: 52, label: "F07.11", category: "drum", section: "cooling",
+    name: { en: "Scrub Column", fr: "Colonne de Lavage" },
+    description: { en: "Removes heavy hydrocarbons (C5+) before MCHE to prevent freeze-out.", fr: "Élimine les hydrocarbures lourds (C5+) avant le MCHE pour éviter le gel." },
+    specs: [{ label: "Trays", value: "20" }, { label: "Bottom T", value: "−25 °C" }],
+  },
+  { id: "103-K01.10", x: 46, y: 70, label: "K01.10", category: "compressor", section: "cooling",
+    name: { en: "Propane Compressor (C3)", fr: "Compresseur Propane (C3)" },
+    description: { en: "4-stage centrifugal compressor driving the propane pre-cooling loop.", fr: "Compresseur centrifuge 4 étages, boucle propane." },
+    specs: [{ label: "Stages", value: "4" }, { label: "Power", value: "32 MW" }, { label: "Driver", value: "GE Frame 5" }],
+  },
+  { id: "103-G07.86", x: 56, y: 76, label: "G07.86", category: "drum", section: "cooling",
+    name: { en: "Propane Suction Drum", fr: "Ballon d'Aspiration Propane" },
+    description: { en: "K.O. drum protecting propane compressor suction stages.", fr: "Ballon K.O. protégeant l'aspiration du compresseur propane." },
+    specs: [{ label: "Pressure", value: "1.4 bar" }],
+  },
+  { id: "104-G07.85", x: 38, y: 78, label: "G07.85", category: "drum", section: "cooling",
+    name: { en: "Propane Accumulator (HP)", fr: "Accumulateur Propane (HP)" },
+    description: { en: "High-pressure propane condensate receiver.", fr: "Accumulateur HP condensat propane." },
+    specs: [{ label: "Pressure", value: "16 bar" }],
+  },
+  { id: "104-G07.90", x: 30, y: 78, label: "G07.90", category: "drum", section: "cooling",
+    name: { en: "Propane Economizer (MP)", fr: "Économiseur Propane (MP)" },
+    description: { en: "Mid-pressure flash stage of propane refrigeration.", fr: "Étage de détente moyenne pression propane." },
+    specs: [{ label: "Pressure", value: "5 bar" }],
+  },
+  { id: "104-G07.91", x: 30, y: 88, label: "G07.91", category: "drum", section: "cooling",
+    name: { en: "Propane Economizer (LP)", fr: "Économiseur Propane (BP)" },
+    description: { en: "Low-pressure flash drum producing coldest propane stream.", fr: "Ballon BP produisant le propane le plus froid." },
+    specs: [{ label: "Pressure", value: "1.4 bar" }],
+  },
+
+  // --- Liquefaction (MCHE + MCR)
+  { id: "106-E05.20", x: 58, y: 28, label: "MCHE", category: "exchanger", section: "liquef",
+    name: { en: "Main Cryogenic Heat Exchanger", fr: "Échangeur Cryogénique Principal" },
+    description: {
+      en: "Air Products coil-wound exchanger liquefying treated gas to −162 °C using mixed-component refrigerant.",
+      fr: "Échangeur bobiné Air Products liquéfiant le gaz traité à −162 °C via réfrigérant mixte (MCR).",
+    },
+    specs: [{ label: "Type", value: "Coil-wound" }, { label: "Outlet T", value: "−162 °C" }, { label: "Height", value: "55 m" }, { label: "Duty", value: "180 MW" }],
+  },
+  { id: "106-G07.83", x: 70, y: 22, label: "G07.83", category: "drum", section: "liquef",
+    name: { en: "MCR HP Separator", fr: "Séparateur MCR HP" },
+    description: { en: "Splits MCR into liquid (MR-L) and vapour (MR-V) streams feeding MCHE.", fr: "Sépare le MCR en liquide (MR-L) et vapeur (MR-V) alimentant le MCHE." },
+    specs: [{ label: "Pressure", value: "44 bar" }],
+  },
+  { id: "105-K01.20", x: 78, y: 38, label: "K01.20", category: "compressor", section: "liquef",
+    name: { en: "MCR Compressor LP/MP", fr: "Compresseur MCR BP/MP" },
+    description: { en: "Low/medium-pressure body of the mixed-refrigerant compressor train.", fr: "Corps BP/MP du train compresseur réfrigérant mixte." },
+    specs: [{ label: "Stages", value: "3" }, { label: "Power", value: "40 MW" }],
+  },
+  { id: "105-K01.21", x: 86, y: 38, label: "K01.21", category: "compressor", section: "liquef",
+    name: { en: "MCR Compressor HP", fr: "Compresseur MCR HP" },
+    description: { en: "High-pressure body — final stage of the MCR loop.", fr: "Corps HP — étage final boucle MCR." },
+    specs: [{ label: "Stages", value: "2" }, { label: "Power", value: "55 MW" }, { label: "Driver", value: "GE Frame 6" }],
+  },
+  { id: "105-G07.88", x: 72, y: 50, label: "G07.88", category: "drum", section: "liquef",
+    name: { en: "MCR Suction Drum", fr: "Ballon Aspiration MCR" },
+    description: { en: "Knock-out drum upstream of MCR compressor LP suction.", fr: "Ballon K.O. en amont aspiration BP compresseur MCR." },
+    specs: [{ label: "Pressure", value: "3.5 bar" }],
+  },
+  { id: "K05-G07.89", x: 86, y: 56, label: "G07.89", category: "drum", section: "liquef",
+    name: { en: "MCR Discharge Drum", fr: "Ballon Refoulement MCR" },
+    description: { en: "Inter-stage K.O. between MCR HP discharge and aftercooler.", fr: "Ballon K.O. inter-étage refoulement HP MCR / aéroréfrigérant." },
+    specs: [{ label: "Pressure", value: "44 bar" }],
+  },
+
+  // --- Fractionation (bottom row)
+  { id: "107-F07.21", x: 8, y: 86, label: "F07.21", category: "column", section: "fract",
+    name: { en: "Demethaniser", fr: "Déméthaniseur" },
+    description: { en: "Strips methane overhead from C2+ liquids recovered in scrub column.", fr: "Strippe le méthane en tête des liquides C2+ du scrub." },
+    specs: [{ label: "Trays", value: "32" }, { label: "Top T", value: "−95 °C" }],
+  },
+  { id: "108-F07.31", x: 18, y: 86, label: "F07.31", category: "column", section: "fract",
+    name: { en: "Deethaniser", fr: "Déethaniseur" },
+    description: { en: "Recovers ethane overhead, sends C3+ to depropaniser.", fr: "Récupère l'éthane en tête, envoie C3+ au dépropaniseur." },
+    specs: [{ label: "Trays", value: "40" }, { label: "Pressure", value: "28 bar" }],
+  },
+  { id: "109-F07.41", x: 28, y: 86, label: "F07.41", category: "column", section: "fract",
+    name: { en: "Depropaniser", fr: "Dépropaniseur" },
+    description: { en: "Produces commercial propane overhead (LPG cut).", fr: "Produit du propane commercial en tête (coupe LPG)." },
+    specs: [{ label: "Trays", value: "45" }, { label: "Pressure", value: "18 bar" }],
+  },
+  { id: "110-F07.51", x: 38, y: 86, label: "F07.51", category: "column", section: "fract",
+    name: { en: "Debutaniser", fr: "Débutaniseur" },
+    description: { en: "Separates butane (top) from natural gasoline (bottom).", fr: "Sépare le butane (tête) de l'essence naturelle (fond)." },
+    specs: [{ label: "Trays", value: "38" }, { label: "Pressure", value: "8 bar" }],
+  },
+  { id: "7E2-G07.65", x: 60, y: 92, label: "G07.65", category: "drum", section: "fract",
+    name: { en: "Gasoline Run-Down Drum", fr: "Ballon de Soutirage Essence" },
+    description: { en: "Collects natural gasoline before storage / export.", fr: "Reçoit l'essence naturelle avant stockage / export." },
+    specs: [{ label: "Service", value: "Gasoline export" }],
+  },
+
+  // --- Fuel gas + LNG storage
+  { id: "102-K01.30", x: 92, y: 14, label: "K01.30", category: "compressor", section: "fuel",
+    name: { en: "Fuel Gas Compressor", fr: "Compresseur Gaz Combustible" },
+    description: { en: "Boosts BOG / fuel gas to plant fuel header (turbines, boilers).", fr: "Comprime le BOG / gaz combustible vers le collecteur (turbines, chaudières)." },
+    specs: [{ label: "Discharge P", value: "28 bar" }],
+  },
+  { id: "LNG-TK", x: 92, y: 30, label: "LNG", category: "storage", section: "storage",
+    name: { en: "LNG Storage Tank", fr: "Bac de Stockage GNL" },
+    description: { en: "Full-containment cryogenic tank feeding the methaniers loading jetty.", fr: "Bac cryogénique full-containment alimentant le quai méthaniers." },
+    specs: [{ label: "Capacity", value: "100 000 m³" }, { label: "Temp", value: "−162 °C" }],
+  },
+];
+
+const EDGES: [string, string, ("feed" | "amine" | "c3" | "mcr" | "lng" | "fuel" | "lpg" | "cw")?][] = [
+  // Decarbonation
+  ["101-F501", "101-F502", "amine"],
+  ["101-F502", "101-F501", "amine"],
+  ["101-F501", "101-G-507", "amine"],
+  ["101-F501", "102-G07.87", "feed"],
+  // Dehydration / demerc
+  ["102-G07.87", "102-R03.10", "feed"],
+  ["102-R03.10", "102-R03.11", "feed"],
+  ["102-R03.11", "102-R03.12", "feed"],
+  ["102-R03.12", "104-F07.11", "feed"],
+  ["102-R03.12", "104-E05.20", "feed"],
+  // Pre-cooling
+  ["104-E05.20", "106-E05.20", "feed"],
+  ["104-F07.11", "106-E05.20", "feed"],
+  ["104-G07.85", "104-G07.90", "c3"],
+  ["104-G07.90", "104-G07.91", "c3"],
+  ["104-G07.91", "103-G07.86", "c3"],
+  ["103-G07.86", "103-K01.10", "c3"],
+  ["103-K01.10", "104-E07.11", "c3"],
+  ["104-E07.11", "104-G07.85", "c3"],
+  ["103-K01.10", "104-E05.20", "c3"],
+  // Cooling water (G1 — blue)
+  ["104-E07.11", "104-E05.20", "cw"],
+  ["K05-G07.89", "104-E07.11", "cw"],
+  // Liquefaction
+  ["106-E05.20", "106-G07.83", "mcr"],
+  ["106-G07.83", "105-G07.88", "mcr"],
+  ["105-G07.88", "105-K01.20", "mcr"],
+  ["105-K01.20", "105-K01.21", "mcr"],
+  ["105-K01.21", "K05-G07.89", "mcr"],
+  ["K05-G07.89", "106-E05.20", "mcr"],
+  // LNG / fuel
+  ["106-E05.20", "LNG-TK", "lng"],
+  ["106-E05.20", "102-K01.30", "fuel"],
+  // Fractionation chain (from scrub column)
+  ["104-F07.11", "107-F07.21", "lpg"],
+  ["107-F07.21", "108-F07.31", "lpg"],
+  ["108-F07.31", "109-F07.41", "lpg"],
+  ["109-F07.41", "110-F07.51", "lpg"],
+  ["110-F07.51", "7E2-G07.65", "lpg"],
+];
+
+const STREAM_COLOR: Record<string, string> = {
+  feed:  "#fbbf24", // yellow GN — natural gas inlet
+  amine: "#22c55e",
+  c3:    "#60a5fa",
+  mcr:   "#a78bfa",
+  lng:   "#22d3ee",
+  fuel:  "#f97316",
+  lpg:   "#84cc16",
+  cw:    "#3b82f6", // blue G1 — cooling water
+};
+
+const RADIUS_BY_CAT: Record<Category, number> = {
+  absorber: 2.6, exchanger: 2.6, compressor: 2.4, column: 2.4,
+  drum: 1.8, turbine: 2.2, pump: 1.8, reactor: 2.2, storage: 2.8,
+};
+
+export default function ProcessFlow() {
+  const { lang } = useI18n();
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [hoverId, setHoverId] = useState<string | null>(null);
+  const [activeSection, setActiveSection] = useState<Node["section"] | "all">("all");
+  const [zoom, setZoom] = useState(1);
+
+  const selected = NODES.find((n) => n.id === selectedId) ?? null;
+  const nodeMap = useMemo(() => Object.fromEntries(NODES.map((n) => [n.id, n])), []);
+
+  const isDimmed = (n: Node) => activeSection !== "all" && n.section !== activeSection;
+
+  const sectionList: (Node["section"] | "all")[] = ["all", "decarb", "dehydr", "demerc", "cooling", "liquef", "fract", "fuel", "storage"];
+
+  // Camera
+  const vbW = 100 / zoom;
+  const vbH = 62.5 / zoom;
+  const vbX = (100 - vbW) / 2;
+  const vbY = (62.5 - vbH) / 2;
+
+  return (
+    <div className="px-4 md:px-10 py-8 md:py-12 max-w-7xl mx-auto">
+      <div className="text-[10px] uppercase tracking-widest font-mono mb-2" style={{ color: ACCENT }}>
+        / {lang === "en" ? "Process Flow · GNL1Z Train" : "Schéma Procédé · Train GNL1Z"}
+      </div>
+      <h1 className="text-3xl md:text-5xl font-display font-bold tracking-tight mb-2">
+        {lang === "en" ? "LNG Liquefaction Train" : "Train de Liquéfaction GNL"}
+      </h1>
+      <p className="text-muted-foreground mb-6 max-w-3xl">
+        {lang === "en"
+          ? "Interactive mimic of the Sonatrach GNL1Z general process view (AP-C3MR™). Tap any equipment to read its description and technical specs. Filter by section to isolate a sub-system."
+          : "Mimic interactif de la vue générale du procédé GNL1Z (AP-C3MR™). Cliquez un équipement pour sa description et ses spécifications. Filtrez par section pour isoler un sous-système."}
+      </p>
+
+      {/* Section filters */}
+      <div className="flex flex-wrap gap-2 mb-3">
+        {sectionList.map((s) => {
+          const active = activeSection === s;
+          const label = s === "all"
+            ? (lang === "en" ? "All sections" : "Toutes sections")
+            : (lang === "en" ? SECTION[s].en : SECTION[s].fr);
+          return (
+            <button
+              key={s}
+              onClick={() => setActiveSection(s)}
+              className="px-3 py-1.5 rounded text-xs font-mono border transition-colors"
+              style={{
+                borderColor: active ? ACCENT : "hsl(var(--border))",
+                background: active ? `${ACCENT}20` : "hsl(var(--card))",
+                color: active ? ACCENT : "hsl(var(--foreground))",
+              }}
+            >
+              {label}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Stream legend */}
+      <div className="flex flex-wrap gap-3 mb-4 text-[11px] font-mono text-muted-foreground">
+        {[
+          ["feed", lang === "en" ? "Feed gas" : "Gaz d'alim."],
+          ["amine", "MEA"],
+          ["c3", lang === "en" ? "Propane (C3)" : "Propane (C3)"],
+          ["mcr", "MCR"],
+          ["lng", "LNG"],
+          ["lpg", "LPG / NGL"],
+          ["fuel", lang === "en" ? "Fuel gas" : "Gaz comb."],
+          ["cw", lang === "en" ? "Cooling water (G1)" : "Eau de refroidissement (G1)"],
+        ].map(([k, label]) => (
+          <span key={k} className="flex items-center gap-1.5">
+            <span className="inline-block w-4 h-0.5" style={{ background: STREAM_COLOR[k as string] }} />
+            {label}
+          </span>
+        ))}
+      </div>
+
+      <div className="rounded-xl border border-border bg-[hsl(220_25%_8%)] overflow-hidden shadow-card relative">
+        {/* Zoom controls */}
+        <div className="absolute top-3 right-3 z-10 flex flex-col gap-1">
+          <Button size="icon" variant="secondary" className="h-8 w-8" onClick={() => setZoom((z) => Math.min(z * 1.25, 3))}><ZoomIn className="h-4 w-4" /></Button>
+          <Button size="icon" variant="secondary" className="h-8 w-8" onClick={() => setZoom((z) => Math.max(z / 1.25, 1))}><ZoomOut className="h-4 w-4" /></Button>
+          <Button size="icon" variant="secondary" className="h-8 w-8" onClick={() => setZoom(1)}><Maximize2 className="h-4 w-4" /></Button>
+        </div>
+
+        <svg viewBox={`${vbX} ${vbY} ${vbW} ${vbH}`} preserveAspectRatio="xMidYMid meet"
+             className="w-full h-auto block transition-[viewBox] duration-300"
+             style={{ aspectRatio: "16 / 10" }}>
+          <defs>
+            <pattern id="pf-grid" width="5" height="5" patternUnits="userSpaceOnUse">
+              <path d="M 5 0 L 0 0 0 5" fill="none" stroke="rgba(255,255,255,0.05)" strokeWidth="0.1" />
+            </pattern>
+            {Object.entries(STREAM_COLOR).map(([k, c]) => (
+              <marker key={k} id={`arr-${k}`} viewBox="0 0 10 10" refX="8" refY="5" markerWidth="4" markerHeight="4" orient="auto-start-reverse">
+                <path d="M 0 0 L 10 5 L 0 10 z" fill={c} />
+              </marker>
+            ))}
+          </defs>
+          <rect x="0" y="0" width="100" height="62.5" fill="url(#pf-grid)" />
+
+          {/* Animated flow keyframes — pause on hover of the diagram */}
+          <style>{`
+            @keyframes pf-flow-dash { to { stroke-dashoffset: -6; } }
+            .pf-flow { animation: pf-flow-dash 1.2s linear infinite; }
+            .pf-edges:hover .pf-flow { animation-play-state: paused; }
+            @keyframes pf-flow-pulse { 0%,100% { opacity: 0.35 } 50% { opacity: 1 } }
+            .pf-glow { animation: pf-flow-pulse 1.6s ease-in-out infinite; }
+            .pf-edges:hover .pf-glow { animation-play-state: paused; }
+          `}</style>
+
+          {/* Section label band */}
+          <text x="50" y="3.5" textAnchor="middle" fontSize="2.2" fontFamily="monospace" fill="rgba(255,255,255,0.4)" letterSpacing="0.4">
+            VUE GÉNÉRALE DU PROCÉDÉ — GNL1Z
+          </text>
+
+          {/* Edges */}
+          <g className="pf-edges">
+          {EDGES.map(([a, b, kind = "feed"], i) => {
+            const na = nodeMap[a]; const nb = nodeMap[b];
+            if (!na || !nb) return null;
+            const dimmed = isDimmed(na) && isDimmed(nb);
+            const active = selectedId === a || selectedId === b || hoverId === a || hoverId === b;
+            const color = STREAM_COLOR[kind];
+            // stagger each dash so the flow feels continuous but not synchronized
+            const delay = `${(i % 6) * -0.2}s`;
+            return (
+              <g key={i} style={{ opacity: dimmed ? 0.15 : 1, transition: "opacity 200ms" }}>
+                {/* base pipe */}
+                <line x1={na.x} y1={na.y} x2={nb.x} y2={nb.y}
+                  stroke={color}
+                  strokeOpacity={active ? 0.9 : 0.45}
+                  strokeWidth={active ? 0.5 : 0.3}
+                  markerEnd={`url(#arr-${kind})`}
+                />
+                {/* animated flow dashes overlaid on pipe */}
+                <line x1={na.x} y1={na.y} x2={nb.x} y2={nb.y}
+                  stroke={color}
+                  strokeOpacity={active ? 1 : 0.85}
+                  strokeWidth={active ? 0.55 : 0.4}
+                  strokeLinecap="round"
+                  strokeDasharray="0.9 5.1"
+                  className="pf-flow"
+                  style={{ animationDelay: delay }}
+                />
+                {/* soft glow on active edges only */}
+                {active && (
+                  <line x1={na.x} y1={na.y} x2={nb.x} y2={nb.y}
+                    stroke={color} strokeOpacity={0.4} strokeWidth={1.4}
+                    strokeLinecap="round" className="pf-glow"
+                  />
+                )}
+              </g>
+            );
+          })}
+          </g>
+
+          {/* Nodes */}
+          {NODES.map((n) => {
+            const isSel = selectedId === n.id;
+            const isHover = hoverId === n.id;
+            const dimmed = isDimmed(n);
+            const r = RADIUS_BY_CAT[n.category];
+            const color = CAT[n.category].color;
+            return (
+              <g key={n.id} style={{ cursor: "pointer", opacity: dimmed ? 0.2 : 1, transition: "opacity 200ms" }}
+                onClick={() => setSelectedId(n.id)}
+                onMouseEnter={() => setHoverId(n.id)}
+                onMouseLeave={() => setHoverId(null)}
+              >
+                {(isSel || isHover) && (
+                  <circle cx={n.x} cy={n.y} r={r + 1.4} fill="none" stroke={ACCENT} strokeWidth="0.35" opacity={isSel ? 0.9 : 0.5}>
+                    {isSel && <animate attributeName="r" values={`${r + 1.2};${r + 2.2};${r + 1.2}`} dur="2s" repeatCount="indefinite" />}
+                  </circle>
+                )}
+                <circle cx={n.x} cy={n.y} r={r}
+                  fill={isSel ? ACCENT : color}
+                  stroke={isSel ? ACCENT : "rgba(255,255,255,0.65)"}
+                  strokeWidth="0.2"
+                />
+                <text x={n.x} y={n.y + 0.55} textAnchor="middle" fontSize="1.25" fontFamily="monospace" fontWeight="700" fill="white" pointerEvents="none">
+                  {n.label}
+                </text>
+                <text x={n.x} y={n.y + r + 1.6} textAnchor="middle" fontSize="1.05" fontFamily="monospace" fill="rgba(255,255,255,0.6)" pointerEvents="none">
+                  {n.id}
+                </text>
+              </g>
+            );
+          })}
+        </svg>
+      </div>
+
+      <div className="text-xs text-muted-foreground mt-3 font-mono">
+        {NODES.length} {lang === "en" ? "equipment items · click to inspect" : "équipements · cliquez pour inspecter"}
+      </div>
+
+      <Sheet open={!!selected} onOpenChange={(o) => !o && setSelectedId(null)}>
+        <SheetContent side="right" className="w-full sm:max-w-md overflow-y-auto">
+          {selected && (
+            <>
+              <SheetHeader>
+                <div className="flex items-center gap-2 mb-2 flex-wrap">
+                  <span className="h-2.5 w-2.5 rounded-full" style={{ background: CAT[selected.category].color }} />
+                  <span className="text-[10px] uppercase tracking-widest font-mono text-muted-foreground">
+                    {lang === "en" ? CAT[selected.category].en : CAT[selected.category].fr}
+                  </span>
+                  <Badge variant="outline" className="font-mono text-[10px]">
+                    {lang === "en" ? SECTION[selected.section].en : SECTION[selected.section].fr}
+                  </Badge>
+                </div>
+                <div className="text-xs font-mono text-muted-foreground">{selected.id}</div>
+                <SheetTitle className="text-2xl font-display">
+                  {lang === "en" ? selected.name.en : selected.name.fr}
+                </SheetTitle>
+                <SheetDescription className="text-base text-foreground/80 leading-relaxed pt-2">
+                  {lang === "en" ? selected.description.en : selected.description.fr}
+                </SheetDescription>
+              </SheetHeader>
+
+              <div className="mt-6">
+                <div className="text-[10px] uppercase tracking-widest font-mono mb-3" style={{ color: ACCENT }}>
+                  {lang === "en" ? "Technical Specifications" : "Spécifications Techniques"}
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  {selected.specs.map((s) => (
+                    <div key={s.label} className="border border-border rounded-lg bg-card p-3">
+                      <div className="text-[10px] uppercase tracking-widest text-muted-foreground">{s.label}</div>
+                      <div className="font-display font-bold text-base mt-1">{s.value}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <Button variant="outline" className="mt-6 w-full" onClick={() => setSelectedId(null)}>
+                <X className="h-4 w-4 mr-2" /> {lang === "en" ? "Close" : "Fermer"}
+              </Button>
+            </>
+          )}
+        </SheetContent>
+      </Sheet>
+    </div>
+  );
+}
