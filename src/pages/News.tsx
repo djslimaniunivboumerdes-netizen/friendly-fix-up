@@ -73,7 +73,16 @@ function normalizeData(raw: unknown): NewsData {
 
 async function loadFromCache(): Promise<{ data: NewsData; ageMs: number } | null> {
   try {
-    const { data: row, error } = await supabase
+    // news_cache is not in auto-generated types — cast through any.
+    const { data: row, error } = await (supabase as unknown as {
+      from: (t: string) => {
+        select: (c: string) => {
+          eq: (k: string, v: string) => {
+            maybeSingle: () => Promise<{ data: { data: unknown; fetched_at: string } | null; error: unknown }>;
+          };
+        };
+      };
+    })
       .from("news_cache")
       .select("data, fetched_at")
       .eq("id", "singleton")
