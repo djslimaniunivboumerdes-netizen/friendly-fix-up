@@ -116,7 +116,7 @@ export default function DcsDetail() {
             src={driveImageUrl(panel.drive_id)}
             alt={lang === "en" ? panel.title_en : panel.title_fr}
             className="w-full h-auto max-h-[70vh] object-contain"
-            referrerPolicy="no-referrer"
+            
           />
         </div>
       </div>
@@ -178,7 +178,7 @@ export default function DcsDetail() {
         </h2>
         {related.length === 0 ? (
           <p className="text-sm text-muted-foreground">
-            {lang === "en" ? "No equipment linked yet to this panel." : "Aucun équipement lié à ce panneau."}
+            {lang === "en" ? "No equipment linked yet to this panel." : "Aucun équipement libé à ce panneau."}
           </p>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
@@ -190,7 +190,7 @@ export default function DcsDetail() {
               >
                 <div>
                   <div className="font-mono text-xs text-accent font-semibold">{eq.tag}</div>
-                  <div className="text-sm font-medium line-clamp-1">{eq.name}</div>
+                  <div className="text-sm font-medium line-clamp-1">{ eq.name }</div>
                 </div>
                 <ArrowRight className="h-4 w-4 text-muted-foreground group-hover:text-accent group-hover:translate-x-0.5 transition-all" />
               </Link>
@@ -203,4 +203,4 @@ export default function DcsDetail() {
       </Button>
     </div>
   );
-}
+                  }
