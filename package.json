@@ -15,6 +15,13 @@
     "electron:build:win": "npm run build:electron && npx electron-builder --win --x64",
     "electron:build:linux": "npm run build:electron && npx electron-builder --linux"
   },
+  "devDependencies": {
+  "eslint": "^9.0.0",
+  "eslint-config-prettier": "^9.0.0",
+  "eslint-plugin-react": "^7.33.0",
+  "eslint-plugin-react-hooks": "^4.6.0",
+  // ... rest of your devDependencies
+  }
   "dependencies": {
     "@hookform/resolvers": "3.9.0",
     "@radix-ui/react-accordion": "^1.2.12",
