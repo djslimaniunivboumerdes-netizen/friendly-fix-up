@@ -320,6 +320,16 @@ export default function ProcessFlow() {
     setZoom((z) => Math.min(Math.max(z * factor, 0.8), 4));
   }, []);
 
+  useEffect(() => {
+    if (!fullscreen) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setFullscreen(false); };
+    window.addEventListener("keydown", onKey);
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => { window.removeEventListener("keydown", onKey); document.body.style.overflow = prev; };
+  }, [fullscreen]);
+
+
   return (
     <div className="px-4 md:px-10 py-8 md:py-12 max-w-7xl mx-auto">
       <div className="text-[10px] uppercase tracking-widest font-mono mb-2" style={{ color: ACCENT }}>
