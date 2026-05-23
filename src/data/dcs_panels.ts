@@ -53,10 +53,19 @@ export function getDcsPanel(id: string) {
 }
 
 // Drive direct image URL (works for image/jpeg files in publicly viewable Drive folder).
+// Drive direct image URL. Google rate-limits the thumbnail endpoint, so we
+// expose a chain of fallbacks tried in order by <DriveImg/>.
 export function driveImageUrl(driveId: string) {
-  // thumbnail endpoint is more reliable than uc?export=view (avoids Google rate-limit pages)
-  // sz=w1200 gives good quality for full-screen view; the browser scales down as needed.
-  return `https://drive.google.com/thumbnail?id=${driveId}&sz=w1200`;
+  return `https://lh3.googleusercontent.com/d/${driveId}=w1600`;
+}
+
+export function driveImageFallbacks(driveId: string): string[] {
+  return [
+    `https://lh3.googleusercontent.com/d/${driveId}=w1600`,
+    `https://drive.google.com/thumbnail?id=${driveId}&sz=w1600`,
+    `https://drive.google.com/thumbnail?id=${driveId}&sz=w800`,
+    `https://drive.google.com/uc?export=view&id=${driveId}`,
+  ];
 }
 
 export function driveViewUrl(driveId: string) {
