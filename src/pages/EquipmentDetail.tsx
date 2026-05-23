@@ -78,8 +78,8 @@ export default function EquipmentDetail() {
           {/* QR panel — slides open below the tag line */}
           {qrOpen && (
             <div className="mt-5 pt-5 border-t border-white/20 flex flex-col sm:flex-row items-start gap-5">
-              <div className="bg-white rounded-xl p-2 shadow-lg shrink-0">
-                <img src={qrSrc} alt={`QR ${eq.tag}`} className="w-40 h-40 block" loading="lazy" />
+              <div className="bg-white rounded-xl p-2 shadow-lg shrink-0 min-w-[10rem] min-h-[10rem] flex items-center justify-center">
+                <img src={qrSrc} alt={`QR ${eq.tag}`} width={160} height={160} className="w-40 h-40 block" loading="eager" decoding="async" />
               </div>
               <div className="text-white/80 space-y-2 text-sm">
                 <div className="font-semibold text-white">{eq.tag} — QR Code</div>

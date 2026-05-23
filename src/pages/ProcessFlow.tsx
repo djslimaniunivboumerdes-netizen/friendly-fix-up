@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, useRef, useCallback } from "react";
 import { useI18n } from "@/contexts/I18nContext";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { X, ZoomIn, ZoomOut, Maximize2 } from "lucide-react";
@@ -276,6 +276,10 @@ export default function ProcessFlow() {
   const [hoverId, setHoverId] = useState<string | null>(null);
   const [activeSection, setActiveSection] = useState<Node["section"] | "all">("all");
   const [zoom, setZoom] = useState(1);
+  // Pan state
+  const [panX, setPanX] = useState(0);
+  const [panY, setPanY] = useState(0);
+  const dragRef = useRef<{ startX: number; startY: number; px: number; py: number } | null>(null);
 
   const selected = NODES.find((n) => n.id === selectedId) ?? null;
   const nodeMap = useMemo(() => Object.fromEntries(NODES.map((n) => [n.id, n])), []);
@@ -287,8 +291,33 @@ export default function ProcessFlow() {
   // Camera
   const vbW = 100 / zoom;
   const vbH = 62.5 / zoom;
-  const vbX = (100 - vbW) / 2;
-  const vbY = (62.5 - vbH) / 2;
+  const vbX = (100 - vbW) / 2 - panX / zoom;
+  const vbY = (62.5 - vbH) / 2 - panY / zoom;
+
+  const onMouseDown = useCallback((e: React.MouseEvent<SVGSVGElement>) => {
+    if ((e.target as Element).closest("[data-node]")) return;
+    dragRef.current = { startX: e.clientX, startY: e.clientY, px: panX, py: panY };
+  }, [panX, panY]);
+
+  const onMouseMove = useCallback((e: React.MouseEvent<SVGSVGElement>) => {
+    if (!dragRef.current) return;
+    const svgEl = e.currentTarget;
+    const rect = svgEl.getBoundingClientRect();
+    const scaleX = 100 / rect.width;
+    const scaleY = 62.5 / rect.height;
+    const dx = (e.clientX - dragRef.current.startX) * scaleX * 0.5;
+    const dy = (e.clientY - dragRef.current.startY) * scaleY * 0.5;
+    setPanX(dragRef.current.px + dx);
+    setPanY(dragRef.current.py + dy);
+  }, []);
+
+  const onMouseUp = useCallback(() => { dragRef.current = null; }, []);
+
+  const onWheel = useCallback((e: React.WheelEvent<SVGSVGElement>) => {
+    e.preventDefault();
+    const factor = e.deltaY < 0 ? 1.15 : 1 / 1.15;
+    setZoom((z) => Math.min(Math.max(z * factor, 0.8), 4));
+  }, []);
 
   return (
     <div className="px-4 md:px-10 py-8 md:py-12 max-w-7xl mx-auto">
@@ -350,14 +379,22 @@ export default function ProcessFlow() {
       <div className="rounded-xl border border-border bg-[hsl(220_25%_8%)] overflow-hidden shadow-card relative">
         {/* Zoom controls */}
         <div className="absolute top-3 right-3 z-10 flex flex-col gap-1">
-          <Button size="icon" variant="secondary" className="h-8 w-8" onClick={() => setZoom((z) => Math.min(z * 1.25, 3))}><ZoomIn className="h-4 w-4" /></Button>
-          <Button size="icon" variant="secondary" className="h-8 w-8" onClick={() => setZoom((z) => Math.max(z / 1.25, 1))}><ZoomOut className="h-4 w-4" /></Button>
-          <Button size="icon" variant="secondary" className="h-8 w-8" onClick={() => setZoom(1)}><Maximize2 className="h-4 w-4" /></Button>
+          <Button size="icon" variant="secondary" className="h-8 w-8" onClick={() => setZoom((z) => Math.min(z * 1.25, 4))}><ZoomIn className="h-4 w-4" /></Button>
+          <Button size="icon" variant="secondary" className="h-8 w-8" onClick={() => setZoom((z) => Math.max(z / 1.25, 0.8))}><ZoomOut className="h-4 w-4" /></Button>
+          <Button size="icon" variant="secondary" className="h-8 w-8" title="Reset view" onClick={() => { setZoom(1); setPanX(0); setPanY(0); }}>
+            <Maximize2 className="h-4 w-4" />
+          </Button>
+        </div>
+        <div className="absolute bottom-3 left-3 z-10 text-[9px] font-mono text-white/30 pointer-events-none">
+          Scroll to zoom · drag to pan · click to inspect
         </div>
 
         <svg viewBox={`${vbX} ${vbY} ${vbW} ${vbH}`} preserveAspectRatio="xMidYMid meet"
-             className="w-full h-auto block transition-[viewBox] duration-300"
-             style={{ aspectRatio: "16 / 10" }}>
+             className="w-full h-auto block select-none"
+             style={{ aspectRatio: "16 / 10", cursor: dragRef.current ? "grabbing" : "grab" }}
+             onMouseDown={onMouseDown} onMouseMove={onMouseMove}
+             onMouseUp={onMouseUp} onMouseLeave={onMouseUp}
+             onWheel={onWheel}>
           <defs>
             <pattern id="pf-grid" width="5" height="5" patternUnits="userSpaceOnUse">
               <path d="M 5 0 L 0 0 0 5" fill="none" stroke="rgba(255,255,255,0.05)" strokeWidth="0.1" />
@@ -369,6 +406,28 @@ export default function ProcessFlow() {
             ))}
           </defs>
           <rect x="0" y="0" width="100" height="62.5" fill="url(#pf-grid)" />
+
+          {/* Section tinted background bands */}
+          {activeSection === "all" ? (
+            <>
+              <rect x="0" y="0" width="20" height="78" rx="1" fill="#10b981" fillOpacity="0.04" />
+              <text x="1" y="6" fontSize="1.4" fontFamily="monospace" fill="#10b981" fillOpacity="0.4" letterSpacing="0.15">DECARB</text>
+              <rect x="20" y="0" width="22" height="50" rx="1" fill="#a78bfa" fillOpacity="0.04" />
+              <text x="21" y="6" fontSize="1.4" fontFamily="monospace" fill="#a78bfa" fillOpacity="0.4" letterSpacing="0.15">DEHYDR/DEMERC</text>
+              <rect x="42" y="0" width="20" height="82" rx="1" fill="#60a5fa" fillOpacity="0.04" />
+              <text x="43" y="6" fontSize="1.4" fontFamily="monospace" fill="#60a5fa" fillOpacity="0.4" letterSpacing="0.15">PRE-COOL</text>
+              <rect x="55" y="0" width="38" height="66" rx="1" fill="#a78bfa" fillOpacity="0.04" />
+              <text x="56" y="6" fontSize="1.4" fontFamily="monospace" fill="#a78bfa" fillOpacity="0.4" letterSpacing="0.15">LIQUEFACTION (MCR)</text>
+              <rect x="0" y="82" width="65" height="18" rx="1" fill="#22c55e" fillOpacity="0.04" />
+              <text x="1" y="88" fontSize="1.4" fontFamily="monospace" fill="#22c55e" fillOpacity="0.35" letterSpacing="0.15">FRACTIONATION</text>
+              <rect x="88" y="0" width="12" height="40" rx="1" fill="#f97316" fillOpacity="0.05" />
+              <text x="89" y="6" fontSize="1.4" fontFamily="monospace" fill="#f97316" fillOpacity="0.4" letterSpacing="0.15">FUEL / LNG</text>
+            </>
+          ) : (
+            <rect x="0" y="0" width="100" height="100" rx="1"
+              fill={CAT[NODES.find(n=>n.section===activeSection)?.category ?? "drum"]?.color ?? "#fff"}
+              fillOpacity="0.03" />
+          )}
 
           {/* Animated flow keyframes — pause on hover of the diagram */}
           <style>{`
@@ -434,25 +493,66 @@ export default function ProcessFlow() {
             const r = RADIUS_BY_CAT[n.category];
             const color = CAT[n.category].color;
             return (
-              <g key={n.id} style={{ cursor: "pointer", opacity: dimmed ? 0.2 : 1, transition: "opacity 200ms" }}
+              <g key={n.id} data-node="1"
+                style={{ cursor: "pointer", opacity: dimmed ? 0.15 : 1, transition: "opacity 200ms" }}
                 onClick={() => setSelectedId(n.id)}
                 onMouseEnter={() => setHoverId(n.id)}
                 onMouseLeave={() => setHoverId(null)}
               >
+                {/* Selection ring */}
                 {(isSel || isHover) && (
-                  <circle cx={n.x} cy={n.y} r={r + 1.4} fill="none" stroke={ACCENT} strokeWidth="0.35" opacity={isSel ? 0.9 : 0.5}>
-                    {isSel && <animate attributeName="r" values={`${r + 1.2};${r + 2.2};${r + 1.2}`} dur="2s" repeatCount="indefinite" />}
+                  <circle cx={n.x} cy={n.y} r={r + 1.6}
+                    fill="none" stroke={ACCENT} strokeWidth={isSel ? 0.4 : 0.25} opacity={isSel ? 0.9 : 0.5}>
+                    {isSel && <animate attributeName="r" values={`${r + 1.4};${r + 2.4};${r + 1.4}`} dur="2.2s" repeatCount="indefinite" />}
                   </circle>
                 )}
-                <circle cx={n.x} cy={n.y} r={r}
-                  fill={isSel ? ACCENT : color}
-                  stroke={isSel ? ACCENT : "rgba(255,255,255,0.65)"}
-                  strokeWidth="0.2"
-                />
-                <text x={n.x} y={n.y + 0.55} textAnchor="middle" fontSize="1.25" fontFamily="monospace" fontWeight="700" fill="white" pointerEvents="none">
+                {/* Glow */}
+                {(isSel || isHover) && (
+                  <circle cx={n.x} cy={n.y} r={r + 0.6} fill={color} fillOpacity={isSel ? 0.25 : 0.12} />
+                )}
+                {/* Shape — column = tall ellipse, drum = wide ellipse, compressor/turbine = diamond, exchanger = rect, default = circle */}
+                {n.category === "column" || n.category === "absorber" ? (
+                  <ellipse cx={n.x} cy={n.y} rx={r * 0.75} ry={r * 1.25}
+                    fill={isSel ? ACCENT : `${color}dd`}
+                    stroke={isSel ? ACCENT : "rgba(255,255,255,0.7)"}
+                    strokeWidth="0.18" />
+                ) : n.category === "drum" ? (
+                  <ellipse cx={n.x} cy={n.y} rx={r * 1.25} ry={r * 0.75}
+                    fill={isSel ? ACCENT : `${color}dd`}
+                    stroke={isSel ? ACCENT : "rgba(255,255,255,0.7)"}
+                    strokeWidth="0.18" />
+                ) : n.category === "compressor" || n.category === "turbine" ? (
+                  <polygon
+                    points={`${n.x},${n.y - r * 1.1} ${n.x + r},${n.y} ${n.x},${n.y + r * 1.1} ${n.x - r},${n.y}`}
+                    fill={isSel ? ACCENT : `${color}dd`}
+                    stroke={isSel ? ACCENT : "rgba(255,255,255,0.7)"}
+                    strokeWidth="0.18" />
+                ) : n.category === "exchanger" ? (
+                  <rect x={n.x - r} y={n.y - r * 0.75} width={r * 2} height={r * 1.5} rx="0.5"
+                    fill={isSel ? ACCENT : `${color}dd`}
+                    stroke={isSel ? ACCENT : "rgba(255,255,255,0.7)"}
+                    strokeWidth="0.18" />
+                ) : (
+                  <circle cx={n.x} cy={n.y} r={r}
+                    fill={isSel ? ACCENT : `${color}dd`}
+                    stroke={isSel ? ACCENT : "rgba(255,255,255,0.7)"}
+                    strokeWidth="0.18" />
+                )}
+                {/* Category icon lines for exchangers */}
+                {n.category === "exchanger" && !isSel && (
+                  <>
+                    <line x1={n.x - r + 0.3} y1={n.y - 0.3} x2={n.x + r - 0.3} y2={n.y - 0.3} stroke="rgba(255,255,255,0.35)" strokeWidth="0.12" />
+                    <line x1={n.x - r + 0.3} y1={n.y + 0.3} x2={n.x + r - 0.3} y2={n.y + 0.3} stroke="rgba(255,255,255,0.35)" strokeWidth="0.12" />
+                  </>
+                )}
+                {/* Node label */}
+                <text x={n.x} y={n.y + 0.5} textAnchor="middle" fontSize="1.2" fontFamily="monospace" fontWeight="700"
+                  fill="white" fillOpacity={dimmed ? 0.4 : 1} pointerEvents="none">
                   {n.label}
                 </text>
-                <text x={n.x} y={n.y + r + 1.6} textAnchor="middle" fontSize="1.05" fontFamily="monospace" fill="rgba(255,255,255,0.6)" pointerEvents="none">
+                {/* Tag below */}
+                <text x={n.x} y={n.y + r + 1.8} textAnchor="middle" fontSize="0.95" fontFamily="monospace"
+                  fill={isSel ? ACCENT : (isHover ? "rgba(255,255,255,0.85)" : "rgba(255,255,255,0.5)")} pointerEvents="none">
                   {n.id}
                 </text>
               </g>

@@ -20,6 +20,7 @@ export default function DcsDetail() {
 
   const [tags, setTags] = useState<string[] | null>(null);
   const [loading, setLoading] = useState(false);
+  const [imgErr, setImgErr] = useState(false);
 
   useEffect(() => {
     if (!panel) return;
@@ -110,14 +111,24 @@ export default function DcsDetail() {
             </a>
           </Button>
         </div>
-        {/* FIX: object-contain + max-height so images aren't crushed */}
-        <div className="bg-black flex items-center justify-center">
-          <img
-            src={driveImageUrl(panel.drive_id)}
-            alt={lang === "en" ? panel.title_en : panel.title_fr}
-            className="w-full h-auto max-h-[70vh] object-contain"
-            
-          />
+        <div className="bg-black flex items-center justify-center min-h-[240px]">
+          {imgErr ? (
+            <div className="flex flex-col items-center gap-3 text-white/30 py-16">
+              <Cpu className="h-12 w-12" />
+              <span className="text-xs font-mono uppercase tracking-widest">DCS Screen Unavailable</span>
+              <a href={driveViewUrl(panel.drive_id)} target="_blank" rel="noopener noreferrer"
+                 className="text-xs text-accent/70 hover:text-accent underline font-mono">
+                Open in Google Drive ↗
+              </a>
+            </div>
+          ) : (
+            <img
+              src={driveImageUrl(panel.drive_id)}
+              alt={lang === "en" ? panel.title_en : panel.title_fr}
+              className="w-full h-auto max-h-[72vh] object-contain"
+              onError={() => setImgErr(true)}
+            />
+          )}
         </div>
       </div>
 

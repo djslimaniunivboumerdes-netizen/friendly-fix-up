@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, useCallback } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import Fuse from "fuse.js";
 import { Cpu, Search, ArrowRight, Tag as TagIcon } from "lucide-react";
@@ -9,6 +9,30 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { useI18n } from "@/contexts/I18nContext";
 import { DCS_PANELS, DCS_SECTIONS, driveImageUrl, getDcsPanel } from "@/data/dcs_panels";
 import { getAllTagsSorted, getTagIndex } from "@/data/dcs_tags";
+
+
+/** Resilient DCS thumbnail — falls back to a placeholder on error */
+function DcsThumb({ driveId, alt }: { driveId: string; alt: string }) {
+  const [err, setErr] = useState(false);
+  return (
+    <div className="aspect-video bg-black border-b border-border overflow-hidden flex items-center justify-center">
+      {err ? (
+        <div className="flex flex-col items-center gap-2 text-white/30">
+          <Cpu className="h-8 w-8" />
+          <span className="text-[10px] font-mono uppercase tracking-widest">DCS Screen</span>
+        </div>
+      ) : (
+        <img
+          src={driveImageUrl(driveId)}
+          alt={alt}
+          className="w-full h-full object-contain group-hover:scale-105 transition-transform duration-500"
+          loading="lazy"
+          onError={() => setErr(true)}
+        />
+      )}
+    </div>
+  );
+}
 
 export default function DcsDirectory() {
   const { t, lang } = useI18n();
@@ -144,16 +168,7 @@ export default function DcsDirectory() {
             to={`/dcs/${p.id}`}
             className="group relative overflow-hidden border border-border rounded-lg bg-card hover:border-accent/50 hover:shadow-industrial transition-all"
           >
-            {/* FIX: object-contain instead of object-cover to prevent crushed images */}
-            <div className="aspect-video bg-black overflow-hidden border-b border-border">
-              <img
-                src={driveImageUrl(p.drive_id)}
-                alt={lang === "en" ? p.title_en : p.title_fr}
-                className="w-full h-full object-contain group-hover:scale-105 transition-transform duration-500"
-                loading="lazy"
-                
-              />
-            </div>
+            <DcsThumb driveId={p.drive_id} alt={lang === "en" ? p.title_en : p.title_fr} />
             <div className="p-4">
               <div className="flex items-center justify-between mb-1.5">
                 <Badge variant="outline" className="font-mono text-[10px]">{p.section}</Badge>
