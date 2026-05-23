@@ -91,8 +91,21 @@ export const UNITS = Array.from(new Set(EQUIPMENT.map((e) => e.unit))).sort();
 export const STATUSES = Array.from(new Set(EQUIPMENT.map((e) => e.testing_status))).sort();
 export const SECTIONS = Array.from(new Set(EQUIPMENT.map((e) => e.section))).sort();
 
+// Normalize tag for robust matching (case + spaces + separator variants).
+function normalizeTag(t: string): string {
+  return t.toUpperCase().replace(/\s+/g, "").replace(/[._]/g, "-");
+}
+const TAG_INDEX: Record<string, Equipment> = (() => {
+  const m: Record<string, Equipment> = {};
+  for (const e of EQUIPMENT) {
+    m[e.tag] = e;
+    m[normalizeTag(e.tag)] = e;
+  }
+  return m;
+})();
 export function getEquipmentByTag(tag: string): Equipment | undefined {
-  return EQUIPMENT.find((e) => e.tag === tag);
+  if (!tag) return undefined;
+  return TAG_INDEX[tag] ?? TAG_INDEX[normalizeTag(tag)];
 }
 
 export function isShellAndTube(eq: Equipment): boolean {
