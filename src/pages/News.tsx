@@ -73,12 +73,13 @@ function normalizeData(raw: unknown): NewsData {
 
 async function loadFromCache(): Promise<{ data: NewsData; ageMs: number } | null> {
   try {
-    // news_cache is not in auto-generated types — cast through any.
-    const { data: row, error } = await (supabase as unknown as {
-      from: (t: string) => {
-        select: (c: string) => {
-          eq: (k: string, v: string) => {
-            maybeSingle: () => Promise<{ data: { data: unknown; fetched_at: string } | null; error: unknown }>;
+    // news_cache is not in the auto-generated types — use a plain JS approach
+    // that avoids brittle TypeScript casts which can fail at runtime.
+    const res = await (supabase as unknown as {
+      from: (table: string) => {
+        select: (cols: string) => {
+          eq: (col: string, val: string) => {
+            maybeSingle: () => Promise<{ data: unknown; error: unknown }>;
           };
         };
       };
@@ -87,7 +88,9 @@ async function loadFromCache(): Promise<{ data: NewsData; ageMs: number } | null
       .select("data, fetched_at")
       .eq("id", "singleton")
       .maybeSingle();
-    if (error || !row?.data || !row.fetched_at) return null;
+
+    const row = res?.data as { data: unknown; fetched_at: string } | null | undefined;
+    if (res?.error || !row?.data || !row.fetched_at) return null;
     const ageMs = Date.now() - new Date(row.fetched_at).getTime();
     return { data: normalizeData(row.data), ageMs };
   } catch {
@@ -109,14 +112,20 @@ async function fetchFresh(
 
   // 2 — Call edge function
   try {
-    const { data, error } = await supabase.functions.invoke("news-feed", {
+    const invokeResult = await supabase.functions.invoke("news-feed", {
       body: {},
       ...(force ? { headers: { "x-force": "1" } } : {}),
     });
     if (signal.aborted) throw new DOMException("Aborted", "AbortError");
-    if (error) throw new Error(error.message ?? "Edge function error");
+    const { data, error } = invokeResult ?? {};
+    if (error) {
+      // Detect common "service not configured" patterns
+      const msg: string = (error as { message?: string }).message ?? String(error);
+      throw new Error(msg);
+    }
     if (!data) throw new Error("Empty response from edge function");
-    if ((data as { error?: string }).error) throw new Error((data as { error: string }).error);
+    const d = data as { error?: string };
+    if (d.error) throw new Error(d.error);
     return { data: normalizeData(data), fromCache: false, ageMs: 0 };
   } catch (e) {
     if (signal.aborted) throw e; // re-throw AbortError
@@ -126,9 +135,9 @@ async function fetchFresh(
       toast({ title: "Using cached data", description: "Edge function unavailable; showing last known data.", variant: "default" });
       return { data: stale.data, fromCache: true, ageMs: stale.ageMs };
     }
-    // 4 — Nothing at all
-    toast({ title: "News unavailable", description: e instanceof Error ? e.message : String(e), variant: "destructive" });
-    return { data: EMPTY_DATA, fromCache: false, ageMs: 0 };
+    // 4 — Nothing at all — surface the error clearly
+    const errMsg = e instanceof Error ? e.message : String(e);
+    throw new Error(errMsg);
   }
 }
 
@@ -252,7 +261,10 @@ export default function News() {
     } catch (e) {
       if (!ctrl.signal.aborted) {
         const msg = e instanceof Error ? e.message : String(e);
-        if (msg !== "Aborted") setError(msg);
+        if (msg !== "Aborted") {
+          setError(msg);
+          setData(null);
+        }
       }
     } finally {
       if (!ctrl.signal.aborted) setLoading(false);
@@ -343,8 +355,18 @@ export default function News() {
           <WifiOff className="h-5 w-5 shrink-0 mt-0.5" />
           <div>
             <div className="font-semibold mb-1">{lang === "en" ? "Could not load news" : "Impossible de charger les actualités"}</div>
-            <div className="text-rose-400/80 font-mono text-xs">{error}</div>
-            <Button size="sm" variant="outline" className="mt-3 border-rose-400/40 text-rose-300" onClick={() => load(true)}>
+            <div className="text-rose-400/80 font-mono text-xs mb-2">{error}</div>
+            {(error.toLowerCase().includes("anthropic_api_key") || error.toLowerCase().includes("key") || error.toLowerCase().includes("function") || error.toLowerCase().includes("relay")) && (
+              <div className="text-xs text-rose-300/70 border border-rose-500/20 rounded p-3 mb-3 font-mono leading-relaxed">
+                <div className="font-semibold text-rose-300 mb-1">
+                  {lang === "en" ? "⚙ Setup required:" : "⚙ Configuration requise :"}
+                </div>
+                {lang === "en"
+                  ? "Add ANTHROPIC_API_KEY to your Supabase project secrets (Dashboard → Settings → Edge Functions → Secrets), then redeploy the news-feed function."
+                  : "Ajoutez ANTHROPIC_API_KEY dans les secrets de votre projet Supabase (Tableau de bord → Paramètres → Edge Functions → Secrets), puis redéployez la fonction news-feed."}
+              </div>
+            )}
+            <Button size="sm" variant="outline" className="mt-1 border-rose-400/40 text-rose-300" onClick={() => load(true)}>
               <RefreshCw className="h-3.5 w-3.5 mr-1.5" /> {lang === "en" ? "Retry" : "Réessayer"}
             </Button>
           </div>
@@ -521,4 +543,4 @@ export default function News() {
       )}
     </div>
   );
-}
+                  }
