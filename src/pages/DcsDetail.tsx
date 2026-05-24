@@ -5,7 +5,8 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useI18n } from "@/contexts/I18nContext";
 import { getDcsPanel, driveImageUrl, driveViewUrl } from "@/data/dcs_panels";
-import { getEquipmentByTag } from "@/data";
+import { getEquipmentByTag, EQUIPMENT } from "@/data";
+import type { Equipment } from "@/data";
 import { getTagsForPanel } from "@/data/dcs_tags";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
@@ -64,16 +65,34 @@ export default function DcsDetail() {
     toast({ title: lang === "en" ? `Found ${t.length} instrument tag(s)` : `${t.length} tag(s) détecté(s)` });
   };
 
-  /* FIX: Merge AI-detected tags with static related_tags so all related equipment shows up */
-  const related = useMemo(() => {
-    const allTags = new Set([
-      ...(panel.related_tags ?? []),
-      ...(tags ?? []),
-    ]);
-    return Array.from(allTags)
-      .map((tag) => getEquipmentByTag(tag))
-      .filter((e): e is NonNullable<typeof e> => !!e);
-  }, [panel, tags]);
+  /**
+   * Build the related equipment list:
+   * 1. Explicit links from panel.related_tags (always shown first)
+   * 2. ALL equipment that belongs to the same process unit as this panel
+   *    (catches equipment that was never manually added to related_tags)
+   *
+   * NOTE: AI-detected tags are *instrument* tags (TI, LI, PI…) which are
+   * completely different from equipment tags (X04-G-07.85) and will never
+   * match the equipment database, so we purposely exclude them here.
+   */
+  const related = useMemo((): Equipment[] => {
+    const map = new Map<string, Equipment>();
+
+    // 1 — Explicitly linked equipment (highest priority, shown first)
+    for (const tag of panel.related_tags ?? []) {
+      const eq = getEquipmentByTag(tag);
+      if (eq) map.set(eq.tag, eq);
+    }
+
+    // 2 — All equipment in the same process unit (e.g., "X04", "X01")
+    if (panel.unit) {
+      for (const eq of EQUIPMENT) {
+        if (eq.unit === panel.unit) map.set(eq.tag, eq);
+      }
+    }
+
+    return Array.from(map.values());
+  }, [panel]);
 
   return (
     <div className="px-4 md:px-8 py-6 md:py-8 max-w-7xl mx-auto">
@@ -215,4 +234,4 @@ export default function DcsDetail() {
       </Button>
     </div>
   );
-                  }
+      }
