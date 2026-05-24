@@ -3,6 +3,7 @@ import { ArrowRight, Database, Cpu, BookOpen, User, Info, Factory, Activity, Pac
 import type { LucideIcon } from "lucide-react";
 import { useI18n } from "@/contexts/I18nContext";
 import { META, EQUIPMENT } from "@/data";
+import { TestScheduleWidget } from "@/components/TestScheduleWidget";
 
 const moduleCards = [
   { key: "about",     to: "/about",      icon: Info,      accent: false, descEn: "Executive summary of the AP-C3MR™ liquefaction facility, capacity & geography.",                descFr: "Résumé exécutif de l'usine de liquéfaction AP-C3MR™, capacité et géographie."                     },
@@ -47,6 +48,8 @@ export default function Dashboard() {
           </div>
         </div>
       </section>
+
+      <div className="pt-8"><TestScheduleWidget /></div>
 
       {/* Modules */}
       <section className="px-4 md:px-10 py-10 max-w-7xl mx-auto">

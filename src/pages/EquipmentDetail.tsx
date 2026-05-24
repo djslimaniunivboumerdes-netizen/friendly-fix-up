@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import Fuse from "fuse.js";
 import { format, parseISO } from "date-fns";
-import { ArrowLeft, Copy, Check, Download, Wrench, Anchor, Snowflake, Package, Info, Search, FileText, Save, CalendarIcon, ExternalLink, QrCode, X } from "lucide-react";
+import { ArrowLeft, Copy, Check, Download, Wrench, Anchor, Snowflake, Package, Info, Search, FileText, Save, CalendarIcon, ExternalLink, QrCode, X, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -18,6 +18,9 @@ import { useI18n } from "@/contexts/I18nContext";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
+import { SvgQr } from "@/components/SvgQr";
+import { ImageGallery } from "@/components/ImageGallery";
+import { MaintenanceTimeline } from "@/components/MaintenanceTimeline";
 import NotFound from "./NotFound";
 
 
@@ -41,7 +44,6 @@ export default function EquipmentDetail() {
 
   // QR computed values (eq is guaranteed non-null here)
   const pageUrl = `${window.location.origin}/equipment/${encodeURIComponent(eq.tag)}`;
-  const qrSrc   = `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(pageUrl)}&format=png&ecc=H&margin=1`;
 
   return (
     <div className="px-4 md:px-8 py-6 md:py-8 max-w-7xl mx-auto">
@@ -78,8 +80,8 @@ export default function EquipmentDetail() {
           {/* QR panel — slides open below the tag line */}
           {qrOpen && (
             <div className="mt-5 pt-5 border-t border-white/20 flex flex-col sm:flex-row items-start gap-5">
-              <div className="bg-white rounded-xl p-2 shadow-lg shrink-0 min-w-[10rem] min-h-[10rem] flex items-center justify-center">
-                <img src={qrSrc} alt={`QR ${eq.tag}`} width={160} height={160} className="w-40 h-40 block" loading="eager" decoding="async" />
+              <div className="bg-white rounded-xl p-2 shadow-lg shrink-0">
+                <SvgQr value={pageUrl} size={160} />
               </div>
               <div className="text-white/80 space-y-2 text-sm">
                 <div className="font-semibold text-white">{eq.tag} — QR Code</div>
@@ -88,19 +90,17 @@ export default function EquipmentDetail() {
                 </p>
                 <div className="font-mono text-[10px] text-white/40 break-all max-w-xs">{pageUrl}</div>
                 <div className="flex gap-2 pt-1">
-                  <a
-                    href={`https://api.qrserver.com/v1/create-qr-code/?size=600x600&data=${encodeURIComponent(pageUrl)}&format=png&ecc=H&margin=4`}
-                    download={`QR_${eq.tag.replace(/[/\\]/g, '-')}.png`}
-                    target="_blank" rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1.5 text-xs bg-white/10 hover:bg-white/20 border border-white/20 rounded-lg px-3 py-1.5 transition-colors"
-                  >
-                    <Download className="h-3.5 w-3.5" /> Download PNG
-                  </a>
                   <button
                     onClick={() => navigator.clipboard.writeText(pageUrl)}
                     className="inline-flex items-center gap-1.5 text-xs bg-white/10 hover:bg-white/20 border border-white/20 rounded-lg px-3 py-1.5 transition-colors"
                   >
                     <Copy className="h-3.5 w-3.5" /> Copy URL
+                  </button>
+                  <button
+                    onClick={() => window.print()}
+                    className="inline-flex items-center gap-1.5 text-xs bg-white/10 hover:bg-white/20 border border-white/20 rounded-lg px-3 py-1.5 transition-colors"
+                  >
+                    <Download className="h-3.5 w-3.5" /> Print
                   </button>
                 </div>
               </div>
@@ -207,6 +207,19 @@ export default function EquipmentDetail() {
           </div>
         </TabsContent>
       </Tabs>
+
+      <div className="mt-6 flex justify-end">
+        <Button asChild className="bg-accent text-accent-foreground hover:bg-accent/90 gap-2">
+          <Link to={`/equipment/${encodeURIComponent(eq.tag)}/log`}>
+            <ShieldCheck className="h-4 w-4" /> Log maintenance test
+          </Link>
+        </Button>
+      </div>
+
+      <div className="mt-6 space-y-5">
+        <ImageGallery tag={eq.tag} />
+        <MaintenanceTimeline tag={eq.tag} />
+      </div>
     </div>
   );
 }
