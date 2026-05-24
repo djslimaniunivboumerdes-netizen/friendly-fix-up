@@ -3,6 +3,7 @@ import { ArrowRight, Database, Cpu, BookOpen, User, Info, Factory, Activity, Pac
 import type { LucideIcon } from "lucide-react";
 import { useI18n } from "@/contexts/I18nContext";
 import { META, EQUIPMENT } from "@/data";
+import { TestScheduleWidget } from "@/components/TestScheduleWidget";
 
 const moduleCards = [
   { key: "about",     to: "/about",      icon: Info,      accent: false, descEn: "Executive summary of the AP-C3MR™ liquefaction facility, capacity & geography.",                descFr: "Résumé exécutif de l'usine de liquéfaction AP-C3MR™, capacité et géographie."                     },
