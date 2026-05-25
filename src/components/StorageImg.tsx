@@ -2,14 +2,14 @@ import { useState, useEffect, type ImgHTMLAttributes } from "react";
 import { Cpu } from "lucide-react";
 
 interface StorageImgProps extends Omit<ImgHTMLAttributes<HTMLImageElement>, "src" | "onError"> {
-  storagePath: string; // e.g., "dcs/general-train.jpg"
+  storagePath: string;
   alt: string;
   fallbackClassName?: string;
 }
 
 /**
- * Resilient Supabase Storage image. Uses public URL from Supabase Storage.
- * No more Google Drive rate limits or 403 errors.
+ * Resilient Supabase Storage image.
+ * Public URL: https://gdkqetzkhgllwbpmqmux.supabase.co/storage/v1/object/public/equipment-images/[path]
  */
 export function StorageImg({ storagePath, alt, fallbackClassName, className, ...rest }: StorageImgProps) {
   const SUPABASE_URL = "https://gdkqetzkhgllwbpmqmux.supabase.co";
@@ -19,7 +19,10 @@ export function StorageImg({ storagePath, alt, fallbackClassName, className, ...
   const [failed, setFailed] = useState(false);
   const [loaded, setLoaded] = useState(false);
 
-  useEffect(() => { setFailed(false); setLoaded(false); }, [storagePath]);
+  useEffect(() => { 
+    setFailed(false); 
+    setLoaded(false); 
+  }, [storagePath]);
 
   if (failed) {
     return (
