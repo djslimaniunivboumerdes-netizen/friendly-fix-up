@@ -22,7 +22,6 @@ export default function DcsDetail() {
 
   const [tags, setTags] = useState<string[] | null>(null);
   const [loading, setLoading] = useState(false);
-  const [imgErr, setImgErr] = useState(false);
 
   useEffect(() => {
     if (!panel) return;
@@ -122,6 +121,7 @@ export default function DcsDetail() {
         </div>
       </div>
 
+      {/* DCS Screen — DriveImg handles its own fallback internally */}
       <div className="border border-border rounded-lg overflow-hidden bg-card mb-6 shadow-card">
         <div className="bg-secondary/60 px-4 py-2 flex items-center justify-between">
           <span className="text-xs uppercase tracking-widest text-muted-foreground font-mono">DCS Screen</span>
@@ -131,24 +131,13 @@ export default function DcsDetail() {
             </a>
           </Button>
         </div>
-        <div className="bg-black flex items-center justify-center min-h-[240px]">
-          {imgErr ? (
-            <div className="flex flex-col items-center gap-3 text-white/30 py-16">
-              <Cpu className="h-12 w-12" />
-              <span className="text-xs font-mono uppercase tracking-widest">DCS Screen Unavailable</span>
-              <a href={driveViewUrl(panel.drive_id)} target="_blank" rel="noopener noreferrer"
-                 className="text-xs text-accent/70 hover:text-accent underline font-mono">
-                Open in Google Drive ↗
-              </a>
-            </div>
-          ) : (
-            <DriveImg
-              driveId={panel.drive_id}
-              alt={lang === "en" ? panel.title_en : panel.title_fr}
-              className="w-full h-auto max-h-[72vh] object-contain"
-              fallbackClassName="flex flex-col items-center gap-3 text-white/30 py-16"
-            />
-          )}
+        <div className="bg-black flex items-center justify-center min-h-[240px] overflow-hidden">
+          <DriveImg
+            driveId={panel.drive_id}
+            alt={lang === "en" ? panel.title_en : panel.title_fr}
+            className="w-full h-auto max-h-[70vh] object-contain"
+            fallbackClassName="flex flex-col items-center gap-3 text-white/30 py-16"
+          />
         </div>
       </div>
 
@@ -209,7 +198,7 @@ export default function DcsDetail() {
         </h2>
         {related.length === 0 ? (
           <p className="text-sm text-muted-foreground">
-            {lang === "en" ? "No equipment linked yet to this panel." : "Aucun équipement libé à ce panneau."}
+            {lang === "en" ? "No equipment linked yet to this panel." : "Aucun équipement lié à ce panneau."}
           </p>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
@@ -217,11 +206,11 @@ export default function DcsDetail() {
               <Link
                 key={eq.tag}
                 to={`/equipment/${encodeURIComponent(eq.tag)}`}
-                className="group flex items-center justify-between border border-border rounded p-3 hover:border-accent/50 hover:bow-secondary/30 transition-all"
+                className="group flex items-center justify-between border border-border rounded p-3 hover:border-accent/50 hover:bg-secondary/30 transition-all"
               >
                 <div>
                   <div className="font-mono text-xs text-accent font-semibold">{eq.tag}</div>
-                  <div className="text-sm font-medium line-clamp-1">{ eq.name }</div>
+                  <div className="text-sm font-medium line-clamp-1">{eq.name}</div>
                 </div>
                 <ArrowRight className="h-4 w-4 text-muted-foreground group-hover:text-accent group-hover:translate-x-0.5 transition-all" />
               </Link>
@@ -234,4 +223,4 @@ export default function DcsDetail() {
       </Button>
     </div>
   );
-      }
+    }
