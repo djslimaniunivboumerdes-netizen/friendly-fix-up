@@ -1,25 +1,30 @@
-import { useMemo, useState, useCallback } from "react";
+import { useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import Fuse from "fuse.js";
 import { Cpu, Search, ArrowRight, Tag as TagIcon } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import { useI18n } from "@/contexts/I18nContext";
 import { DCS_PANELS, DCS_SECTIONS, getDcsPanel } from "@/data/dcs_panels";
 import { getAllTagsSorted, getTagIndex } from "@/data/dcs_tags";
 import { DriveImg } from "@/components/DriveImg";
 
-
-/** Resilient DCS thumbnail — falls back to a placeholder on error */
+/** Resilient DCS thumbnail — preserves original aspect ratio, no crushing */
 function DcsThumb({ driveId, alt }: { driveId: string; alt: string }) {
   return (
-    <div className="aspect-video bg-black border-b border-border overflow-hidden flex items-center justify-center">
+    <div className="bg-black border-b border-border overflow-hidden flex items-center justify-center min-h-[180px]">
       <DriveImg
         driveId={driveId}
         alt={alt}
-        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+        className="w-full h-auto max-h-[260px] object-contain group-hover:scale-105 transition-transform duration-500"
       />
     </div>
   );
@@ -33,10 +38,14 @@ export default function DcsDirectory() {
   const [tagsOpen, setTagsOpen] = useState(false);
   const [tagQuery, setTagQuery] = useState("");
 
-  const fuse = useMemo(() => new Fuse(DCS_PANELS, {
-    threshold: 0.35,
-    keys: ["title_en", "title_fr", "section", "unit", "related_tags"],
-  }), []);
+  const fuse = useMemo(
+    () =>
+      new Fuse(DCS_PANELS, {
+        threshold: 0.35,
+        keys: ["title_en", "title_fr", "section", "unit", "related_tags"],
+      }),
+    []
+  );
 
   const list = useMemo(() => {
     let l = q.trim() ? fuse.search(q).map((r) => r.item) : DCS_PANELS;
@@ -60,7 +69,9 @@ export default function DcsDirectory() {
 
   return (
     <div className="px-4 md:px-8 py-6 md:py-8 max-w-7xl mx-auto">
-      <div className="text-[10px] uppercase tracking-widest text-accent font-mono mb-1">/ {t("dcs")}</div>
+      <div className="text-[10px] uppercase tracking-widest text-accent font-mono mb-1">
+        / {t("dcs")}
+      </div>
       <div className="flex items-center gap-3 mb-2">
         <Cpu className="h-7 w-7 text-accent" />
         <h1 className="text-3xl md:text-4xl font-display font-bold">{t("dcs")}</h1>
@@ -74,7 +85,12 @@ export default function DcsDirectory() {
       <div className="flex flex-col md:flex-row gap-3 mb-5">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder={t("search")} className="pl-9 h-11" />
+          <Input
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder={t("search")}
+            className="pl-9 h-11"
+          />
         </div>
 
         <Dialog open={tagsOpen} onOpenChange={setTagsOpen}>
@@ -82,15 +98,21 @@ export default function DcsDirectory() {
             <Button variant="outline" className="h-11 gap-2">
               <TagIcon className="h-4 w-4" />
               {lang === "en" ? "All Tags" : "Tous les tags"}
-              <Badge variant="secondary" className="ml-1 font-mono">{allTags.length}</Badge>
+              <Badge variant="secondary" className="ml-1 font-mono">
+                {allTags.length}
+              </Badge>
             </Button>
           </DialogTrigger>
           <DialogContent className="max-w-2xl max-h-[80vh] flex flex-col">
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
                 <TagIcon className="h-5 w-5 text-accent" />
-                {lang === "en" ? "All Detected Instrument Tags" : "Tous les tags d'instruments détectés"}
-                <Badge variant="outline" className="font-mono">{filteredTags.length}/{allTags.length}</Badge>
+                {lang === "en"
+                  ? "All Detected Instrument Tags"
+                  : "Tous les tags d'instruments détectés"}
+                <Badge variant="outline" className="font-mono">
+                  {filteredTags.length}/{allTags.length}
+                </Badge>
               </DialogTitle>
             </DialogHeader>
             <div className="relative">
@@ -98,7 +120,11 @@ export default function DcsDirectory() {
               <Input
                 value={tagQuery}
                 onChange={(e) => setTagQuery(e.target.value)}
-                placeholder={lang === "en" ? "Filter tags (e.g. FT-1503)" : "Filtrer les tags (ex. FT-1503)"}
+                placeholder={
+                  lang === "en"
+                    ? "Filter tags (e.g. FT-1503)"
+                    : "Filtrer les tags (ex. FT-1503)"
+                }
                 className="pl-9"
               />
             </div>
@@ -111,18 +137,26 @@ export default function DcsDirectory() {
                     <button
                       key={tag}
                       onClick={() => goToTag(tag)}
-                      title={firstPanel ? (lang === "en" ? firstPanel.title_en : firstPanel.title_fr) : ""}
+                      title={
+                        firstPanel
+                          ? lang === "en"
+                            ? firstPanel.title_en
+                            : firstPanel.title_fr
+                          : ""
+                      }
                       className="px-2 py-1 rounded border border-accent/30 bg-accent/10 hover:bg-accent hover:text-accent-foreground text-accent font-mono text-xs transition-colors"
                     >
                       {tag}
                       {panels.length > 1 && (
-                        <span className="ml-1 opacity-60">×{panels.length}</span>
+                        <span className="ml-1 opacity-60">{panels.length}</span>
                       )}
                     </button>
                   );
                 })}
                 {filteredTags.length === 0 && (
-                  <p className="text-sm text-muted-foreground py-4">{t("noResults")}</p>
+                  <p className="text-sm text-muted-foreground py-4">
+                    {t("noResults")}
+                  </p>
                 )}
               </div>
             </div>
@@ -133,7 +167,9 @@ export default function DcsDirectory() {
           <button
             onClick={() => setSection("all")}
             className={`px-3 h-11 rounded border text-xs font-mono uppercase tracking-wider transition-colors ${
-              section === "all" ? "bg-accent text-accent-foreground border-accent" : "bg-card border-border hover:border-accent/50"
+              section === "all"
+                ? "bg-accent text-accent-foreground border-accent"
+                : "bg-card border-border hover:border-accent/50"
             }`}
           >
             {lang === "en" ? "All" : "Tout"}
@@ -143,7 +179,9 @@ export default function DcsDirectory() {
               key={s}
               onClick={() => setSection(s)}
               className={`px-3 h-11 rounded border text-xs font-mono uppercase tracking-wider transition-colors ${
-                section === s ? "bg-accent text-accent-foreground border-accent" : "bg-card border-border hover:border-accent/50"
+                section === s
+                  ? "bg-accent text-accent-foreground border-accent"
+                  : "bg-card border-border hover:border-accent/50"
               }`}
             >
               {s}
@@ -159,11 +197,20 @@ export default function DcsDirectory() {
             to={`/dcs/${p.id}`}
             className="group relative overflow-hidden border border-border rounded-lg bg-card hover:border-accent/50 hover:shadow-industrial transition-all"
           >
-            <DcsThumb driveId={p.drive_id} alt={lang === "en" ? p.title_en : p.title_fr} />
+            <DcsThumb
+              driveId={p.drive_id}
+              alt={lang === "en" ? p.title_en : p.title_fr}
+            />
             <div className="p-4">
               <div className="flex items-center justify-between mb-1.5">
-                <Badge variant="outline" className="font-mono text-[10px]">{p.section}</Badge>
-                {p.unit && <span className="font-mono text-[10px] text-muted-foreground">{p.unit}</span>}
+                <Badge variant="outline" className="font-mono text-[10px]">
+                  {p.section}
+                </Badge>
+                {p.unit && (
+                  <span className="font-mono text-[10px] text-muted-foreground">
+                    {p.unit}
+                  </span>
+                )}
               </div>
               <div className="flex items-start justify-between gap-2">
                 <div className="font-display font-semibold leading-tight">
@@ -175,9 +222,11 @@ export default function DcsDirectory() {
           </Link>
         ))}
         {list.length === 0 && (
-          <div className="col-span-full text-center text-muted-foreground py-12">{t("noResults")}</div>
+          <div className="col-span-full text-center text-muted-foreground py-12">
+            {t("noResults")}
+          </div>
         )}
       </div>
     </div>
   );
-                    }
+              }
