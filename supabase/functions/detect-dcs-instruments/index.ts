@@ -1,5 +1,5 @@
-// detect-dcs-instruments edge function — Gemini Flash vision (aligned with news-feed)
-// Set GEMINI_API_KEY as Supabase secret. No Lovable gateway needed.
+// detect-dcs-instruments edge function — Gemini Flash vision
+// Uses Supabase Storage for reliable image access
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
 
 const corsHeaders = {
@@ -9,10 +9,11 @@ const corsHeaders = {
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+const BUCKET_NAME = "equipment-images";
 
 interface ReqBody {
   panel_id: string;
-  image_url: string; // public Drive thumbnail
+  storage_path: string; // e.g., "dcs/general-train.jpg"
   force?: boolean;
 }
 
@@ -27,9 +28,9 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
-    const { panel_id, image_url, force }: ReqBody = await req.json();
-    if (!panel_id || !image_url) {
-      return json({ error: "panel_id and image_url required" }, 400);
+    const { panel_id, storage_path, force }: ReqBody = await req.json();
+    if (!panel_id || !storage_path) {
+      return json({ error: "panel_id and storage_path required" }, 400);
     }
 
     // Cache check
@@ -42,18 +43,37 @@ Deno.serve(async (req) => {
       }
     }
 
-    // Fetch the image as base64
+    // Fetch image from Supabase Storage (reliable, same domain)
+    const imageUrl = `${SUPABASE_URL}/storage/v1/object/public/${BUCKET_NAME}/${storage_path}`;
     let imageBase64: string;
+    let imageMimeType = "image/jpeg";
+
     try {
-      const imgRes = await fetch(image_url, { redirect: "follow" });
-      if (!imgRes.ok) throw new Error(`Image fetch failed: ${imgRes.status}`);
+      const imgRes = await fetch(imageUrl, { 
+        headers: { Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}` }
+      });
+
+      if (!imgRes.ok) {
+        return json({ 
+          error: "IMAGE_FETCH_FAILED", 
+          message: `Cannot access image at ${storage_path}. Status: ${imgRes.status}`,
+          suggestion: "Ensure the image exists in Supabase Storage bucket 'equipment-images'"
+        }, 422);
+      }
+
       const imgBuffer = await imgRes.arrayBuffer();
       imageBase64 = btoa(String.fromCharCode(...new Uint8Array(imgBuffer)));
+      const ct = imgRes.headers.get("content-type");
+      if (ct) imageMimeType = ct.split(";")[0];
     } catch (imgErr) {
-      return json({ error: `Failed to fetch image: ${(imgErr as Error).message}` }, 400);
+      return json({ 
+        error: "IMAGE_FETCH_FAILED", 
+        message: `Failed to fetch image: ${(imgErr as Error).message}`,
+        suggestion: "Check Supabase Storage configuration and RLS policies"
+      }, 422);
     }
 
-    // Try Gemini (same approach as news-feed)
+    // Call Gemini
     const geminiKey = Deno.env.get("GEMINI_API_KEY");
     if (!geminiKey) {
       return json({ error: "GEMINI_API_KEY not configured" }, 500);
@@ -77,7 +97,7 @@ Example: ["FT-1503","PIC-501A","TT-22"]. If none, return [].`,
                 },
                 {
                   inlineData: {
-                    mimeType: "image/jpeg",
+                    mimeType: imageMimeType,
                     data: imageBase64,
                   },
                 },
