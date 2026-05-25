@@ -1,16 +1,16 @@
 import { useEffect, useState, useMemo } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
-import { ArrowLeft, ArrowRight, Cpu, ExternalLink, Sparkles, RefreshCw, Tag } from "lucide-react";
+import { ArrowLeft, ArrowRight, Cpu, ExternalLink, Sparkles, RefreshCw, Tag, ImageOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useI18n } from "@/contexts/I18nContext";
-import { getDcsPanel, driveImageUrl, driveViewUrl } from "@/data/dcs_panels";
+import { getDcsPanel, dcsImageUrl, dcsImageViewUrl } from "@/data/dcs_panels";
 import { getEquipmentByTag, EQUIPMENT } from "@/data";
 import type { Equipment } from "@/data";
 import { getTagsForPanel } from "@/data/dcs_tags";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
-import { DriveImg } from "@/components/DriveImg";
+import { StorageImg } from "@/components/StorageImg";
 import NotFound from "./NotFound";
 
 export default function DcsDetail() {
@@ -23,6 +23,7 @@ export default function DcsDetail() {
   const [tags, setTags] = useState<string[] | null>(null);
   const [loading, setLoading] = useState(false);
   const [imgLoaded, setImgLoaded] = useState(false);
+  const [imgError, setImgError] = useState(false);
 
   useEffect(() => {
     if (!panel) return;
@@ -50,10 +51,18 @@ export default function DcsDetail() {
     setLoading(true);
     try {
       const { data, error } = await supabase.functions.invoke("detect-dcs-instruments", {
-        body: { panel_id: panel.id, image_url: driveImageUrl(panel.drive_id), force },
+        body: { panel_id: panel.id, storage_path: panel.storage_path, force },
       });
       if (error) {
         toast({ title: lang === "en" ? "Detection failed" : "Échec de détection", description: error.message, variant: "destructive" });
+        return;
+      }
+      if ((data as { error?: string })?.error === "IMAGE_FETCH_FAILED") {
+        toast({ 
+          title: lang === "en" ? "Cannot access DCS image" : "Impossible d'accéder à l'image DCS", 
+          description: (data as { message?: string }).message ?? "Image not found in Storage",
+          variant: "destructive" 
+        });
         return;
       }
       if ((data as { error?: string })?.error) {
@@ -74,32 +83,17 @@ export default function DcsDetail() {
     }
   };
 
-  /**
-   * Build the related equipment list:
-   * 1. Explicit links from panel.related_tags (always shown first)
-   * 2. ALL equipment that belongs to the same process unit as this panel
-   *    (catches equipment that was never manually added to related_tags)
-   *
-   * NOTE: AI-detected tags are *instrument* tags (TI, LI, PI…) which are
-   * completely different from equipment tags (X04-G-07.85) and will never
-   * match the equipment database, so we purposely exclude them here.
-   */
   const related = useMemo((): Equipment[] => {
     const map = new Map<string, Equipment>();
-
-    // 1 — Explicitly linked equipment (highest priority, shown first)
     for (const tag of panel.related_tags ?? []) {
       const eq = getEquipmentByTag(tag);
       if (eq) map.set(eq.tag, eq);
     }
-
-    // 2 — All equipment in the same process unit (e.g., "X04", "X01")
     if (panel.unit) {
       for (const eq of EQUIPMENT) {
         if (eq.unit === panel.unit) map.set(eq.tag, eq);
       }
     }
-
     return Array.from(map.values());
   }, [panel]);
 
@@ -131,24 +125,18 @@ export default function DcsDetail() {
         </div>
       </div>
 
-      {/* DCS Screen — FIXED: no more crushed images */}
+      {/* DCS Screen */}
       <div className="border border-border rounded-lg overflow-hidden bg-card mb-6 shadow-card">
         <div className="bg-secondary/60 px-4 py-2 flex items-center justify-between">
           <span className="text-xs uppercase tracking-widest text-muted-foreground font-mono">DCS Screen</span>
           <Button asChild variant="outline" size="sm" className="gap-2">
-            <a href={driveViewUrl(panel.drive_id)} target="_blank" rel="noopener noreferrer">
+            <a href={dcsImageViewUrl(panel.storage_path)} target="_blank" rel="noopener noreferrer">
               {t("openInDrive")} <ExternalLink className="h-3.5 w-3.5" />
             </a>
           </Button>
         </div>
-        {/* 
-          FIX: Changed from flex center with min-h to a proper aspect-ratio container.
-          The image now fills the width and uses object-contain within a 16:9 aspect 
-          ratio container. This prevents the "crushed" look where the image was tiny 
-          inside a huge black box.
-        */}
         <div className="relative bg-black w-full" style={{ aspectRatio: "16/9" }}>
-          {!imgLoaded && (
+          {!imgLoaded && !imgError && (
             <div className="absolute inset-0 flex items-center justify-center">
               <div className="flex flex-col items-center gap-2 text-white/30">
                 <Cpu className="h-8 w-8 animate-pulse" />
@@ -156,12 +144,22 @@ export default function DcsDetail() {
               </div>
             </div>
           )}
-          <DriveImg
-            driveId={panel.drive_id}
+          {imgError && (
+            <div className="absolute inset-0 flex items-center justify-center">
+              <div className="flex flex-col items-center gap-3 text-white/40">
+                <ImageOff className="h-12 w-12" />
+                <span className="text-sm font-medium">DCS Image Unavailable</span>
+                <span className="text-[10px] font-mono text-white/30 max-w-xs text-center">
+                  Image not found in Supabase Storage. Please upload to bucket 'equipment-images'.
+                </span>
+              </div>
+            </div>
+          )}
+          <StorageImg
+            storagePath={panel.storage_path}
             alt={lang === "en" ? panel.title_en : panel.title_fr}
-            className="w-full h-full object-contain"
+            className={`w-full h-full object-contain ${imgError ? 'hidden' : ''}`}
             fallbackClassName="flex flex-col items-center justify-center gap-3 text-white/30 w-full h-full"
-            onLoad={() => setImgLoaded(true)}
           />
         </div>
       </div>
@@ -248,4 +246,4 @@ export default function DcsDetail() {
       </Button>
     </div>
   );
-          }
+                  }
