@@ -17,14 +17,27 @@ import { DCS_PANELS, DCS_SECTIONS, getDcsPanel } from "@/data/dcs_panels";
 import { getAllTagsSorted, getTagIndex } from "@/data/dcs_tags";
 import { DriveImg } from "@/components/DriveImg";
 
-/** Resilient DCS thumbnail — preserves original aspect ratio, no crushing */
+/** 
+ * Resilient DCS thumbnail — preserves original aspect ratio, no crushing.
+ * Uses a 16:9 aspect ratio container so all thumbnails look uniform.
+ */
 function DcsThumb({ driveId, alt }: { driveId: string; alt: string }) {
+  const [loaded, setLoaded] = useState(false);
   return (
-    <div className="bg-black border-b border-border overflow-hidden flex items-center justify-center min-h-[180px]">
+    <div className="relative bg-black border-b border-border overflow-hidden" style={{ aspectRatio: "16/9" }}>
+      {!loaded && (
+        <div className="absolute inset-0 flex items-center justify-center">
+          <div className="flex flex-col items-center gap-2 text-white/30">
+            <Cpu className="h-6 w-6 animate-pulse" />
+            <span className="text-[10px] font-mono uppercase tracking-widest">Loading…</span>
+          </div>
+        </div>
+      )}
       <DriveImg
         driveId={driveId}
         alt={alt}
-        className="w-full h-auto max-h-[260px] object-contain group-hover:scale-105 transition-transform duration-500"
+        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+        onLoad={() => setLoaded(true)}
       />
     </div>
   );
@@ -70,7 +83,7 @@ export default function DcsDirectory() {
   return (
     <div className="px-4 md:px-8 py-6 md:py-8 max-w-7xl mx-auto">
       <div className="text-[10px] uppercase tracking-widest text-accent font-mono mb-1">
-        / {t("dcs")}
+        {/* {t("dcs")} */}
       </div>
       <div className="flex items-center gap-3 mb-2">
         <Cpu className="h-7 w-7 text-accent" />
@@ -229,4 +242,4 @@ export default function DcsDirectory() {
       </div>
     </div>
   );
-              }
+            }
