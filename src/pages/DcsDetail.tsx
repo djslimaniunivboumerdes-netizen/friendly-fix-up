@@ -22,6 +22,7 @@ export default function DcsDetail() {
 
   const [tags, setTags] = useState<string[] | null>(null);
   const [loading, setLoading] = useState(false);
+  const [imgLoaded, setImgLoaded] = useState(false);
 
   useEffect(() => {
     if (!panel) return;
@@ -47,21 +48,30 @@ export default function DcsDetail() {
 
   const detect = async (force = false) => {
     setLoading(true);
-    const { data, error } = await supabase.functions.invoke("detect-dcs-instruments", {
-      body: { panel_id: panel.id, image_url: driveImageUrl(panel.drive_id), force },
-    });
-    setLoading(false);
-    if (error) {
-      toast({ title: lang === "en" ? "Detection failed" : "Échec de détection", description: error.message, variant: "destructive" });
-      return;
+    try {
+      const { data, error } = await supabase.functions.invoke("detect-dcs-instruments", {
+        body: { panel_id: panel.id, image_url: driveImageUrl(panel.drive_id), force },
+      });
+      if (error) {
+        toast({ title: lang === "en" ? "Detection failed" : "Échec de détection", description: error.message, variant: "destructive" });
+        return;
+      }
+      if ((data as { error?: string })?.error) {
+        toast({ title: lang === "en" ? "Detection failed" : "Échec de détection", description: (data as { error: string }).error, variant: "destructive" });
+        return;
+      }
+      const t = (data as { tags?: string[] }).tags ?? [];
+      setTags(t);
+      toast({ title: lang === "en" ? `Found ${t.length} instrument tag(s)` : `${t.length} tag(s) détecté(s)` });
+    } catch (err) {
+      toast({ 
+        title: lang === "en" ? "Detection failed" : "Échec de détection", 
+        description: err instanceof Error ? err.message : "Network error", 
+        variant: "destructive" 
+      });
+    } finally {
+      setLoading(false);
     }
-    if ((data as { error?: string })?.error) {
-      toast({ title: lang === "en" ? "Detection failed" : "Échec de détection", description: (data as { error: string }).error, variant: "destructive" });
-      return;
-    }
-    const t = (data as { tags?: string[] }).tags ?? [];
-    setTags(t);
-    toast({ title: lang === "en" ? `Found ${t.length} instrument tag(s)` : `${t.length} tag(s) détecté(s)` });
   };
 
   /**
@@ -121,7 +131,7 @@ export default function DcsDetail() {
         </div>
       </div>
 
-      {/* DCS Screen — DriveImg handles its own fallback internally */}
+      {/* DCS Screen — FIXED: no more crushed images */}
       <div className="border border-border rounded-lg overflow-hidden bg-card mb-6 shadow-card">
         <div className="bg-secondary/60 px-4 py-2 flex items-center justify-between">
           <span className="text-xs uppercase tracking-widest text-muted-foreground font-mono">DCS Screen</span>
@@ -131,12 +141,27 @@ export default function DcsDetail() {
             </a>
           </Button>
         </div>
-        <div className="bg-black flex items-center justify-center min-h-[240px] overflow-hidden">
+        {/* 
+          FIX: Changed from flex center with min-h to a proper aspect-ratio container.
+          The image now fills the width and uses object-contain within a 16:9 aspect 
+          ratio container. This prevents the "crushed" look where the image was tiny 
+          inside a huge black box.
+        */}
+        <div className="relative bg-black w-full" style={{ aspectRatio: "16/9" }}>
+          {!imgLoaded && (
+            <div className="absolute inset-0 flex items-center justify-center">
+              <div className="flex flex-col items-center gap-2 text-white/30">
+                <Cpu className="h-8 w-8 animate-pulse" />
+                <span className="text-[10px] font-mono uppercase tracking-widest">Loading DCS Screen…</span>
+              </div>
+            </div>
+          )}
           <DriveImg
             driveId={panel.drive_id}
             alt={lang === "en" ? panel.title_en : panel.title_fr}
-            className="w-full h-auto max-h-[70vh] object-contain"
-            fallbackClassName="flex flex-col items-center gap-3 text-white/30 py-16"
+            className="w-full h-full object-contain"
+            fallbackClassName="flex flex-col items-center justify-center gap-3 text-white/30 w-full h-full"
+            onLoad={() => setImgLoaded(true)}
           />
         </div>
       </div>
@@ -153,7 +178,7 @@ export default function DcsDetail() {
           <div className="flex gap-2">
             {(!tags || tags.length === 0) && (
               <Button onClick={() => detect(false)} disabled={loading} size="sm" className="bg-accent hover:bg-accent/90 text-accent-foreground gap-2">
-                <Sparkles className="h-4 w-4" /> {loading ? "…" : (lang === "en" ? "Detect with AI" : "Détecter avec IA")}
+                <Sparkles className="h-4 w-4" /> {loading ? "…" : (lang === "en" ? "Detect with AI" : "Détecter avec AI")}
               </Button>
             )}
             {tags && tags.length > 0 && (
@@ -169,7 +194,7 @@ export default function DcsDetail() {
           <p className="text-sm text-muted-foreground">
             {lang === "en"
               ? "No tags detected yet. Click 'Detect with AI' to scan this DCS screen with vision AI."
-              : "Aucun tag détecté. Cliquez 'Détecter avec IA' pour scanner cet écran DCS."}
+              : "Aucun tag détecté. Cliquez 'Détecter avec AI' pour scanner cet écran DCS."}
           </p>
         ) : (
           <div className="flex flex-wrap gap-1.5">
@@ -223,4 +248,4 @@ export default function DcsDetail() {
       </Button>
     </div>
   );
-    }
+}
