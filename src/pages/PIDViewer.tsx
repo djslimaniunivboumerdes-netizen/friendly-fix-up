@@ -1,325 +1,207 @@
-import { useState, useMemo, useCallback, useRef, useEffect } from "react";
+import { useCallback, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { useI18n } from "@/contexts/I18nContext";
 import {
   PID_SECTIONS,
+  PIDSection,
   CATEGORY_META,
+  getUnits,
+  getSectionsByUnit,
   driveImageUrl,
+  driveViewerUrl,
   buildEquipmentIndex,
-  type PIDSection,
-  type PIDCategory,
 } from "@/data/pid-sections";
+import {
+  Search,
+  X,
+  ZoomIn,
+  ZoomOut,
+  Maximize2,
+  ChevronRight,
+  ChevronLeft,
+  FileText,
+  ExternalLink,
+  Layers,
+  Tag,
+  Info,
+} from "lucide-react";
+import { clsx, type ClassValue } from "clsx";
+import { twMerge } from "tailwind-merge";
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Sub-components
-// ─────────────────────────────────────────────────────────────────────────────
-
-interface BadgeProps {
-  category: PIDCategory;
+function cn(...inputs: ClassValue[]) {
+  return twMerge(clsx(inputs));
 }
-function CategoryBadge({ category }: BadgeProps) {
-  const meta = CATEGORY_META[category];
-  return (
-    <span
-      className={`inline-flex items-center gap-1.5 text-xs font-medium px-2 py-0.5 rounded-full border ${meta.bg} ${meta.color} ${meta.border}`}
-    >
-      <span className={`w-1.5 h-1.5 rounded-full ${meta.dot}`} />
-      {meta.label}
-    </span>
-  );
-}
 
-interface PIDCardProps {
+// ─── Sub-components ───
+
+function SectionCard({
+  section,
+  isActive,
+  onClick,
+}: {
   section: PIDSection;
-  onClick: (section: PIDSection) => void;
-}
-function PIDCard({ section, onClick }: PIDCardProps) {
-  const [imgLoaded, setImgLoaded] = useState(false);
-  const [imgError, setImgError] = useState(false);
-
+  isActive: boolean;
+  onClick: () => void;
+}) {
+  const meta = CATEGORY_META[section.category];
   return (
     <button
-      onClick={() => onClick(section)}
-      className="group relative flex flex-col overflow-hidden rounded-xl border border-slate-700/60 bg-slate-900 hover:border-amber-500/60 hover:bg-slate-800/80 transition-all duration-200 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400"
+      onClick={onClick}
+      className={cn(
+        "w-full text-left rounded-lg border px-3 py-2.5 transition-all duration-150",
+        isActive
+          ? "bg-white/10 border-teal-500/40 shadow-[0_0_12px_rgba(20,184,166,0.1)]"
+          : "bg-white/5 border-white/5 hover:bg-white/8 hover:border-white/15"
+      )}
     >
-      {/* Thumbnail */}
-      <div className="relative h-44 bg-slate-800 overflow-hidden">
-        {!imgError ? (
-          <>
-            {!imgLoaded && (
-              <div className="absolute inset-0 flex items-center justify-center">
-                <div className="flex flex-col items-center gap-2">
-                  <div className="w-6 h-6 border-2 border-slate-600 border-t-amber-400 rounded-full animate-spin" />
-                  <span className="text-xs text-slate-500">Loading P&amp;ID…</span>
-                </div>
-              </div>
-            )}
-            <img
-              src={driveImageUrl(section.fileId, "w800")}
-              alt={`P&ID – ${section.title}`}
-              className={`w-full h-full object-cover object-top transition-all duration-300 group-hover:scale-105 ${
-                imgLoaded ? "opacity-100" : "opacity-0"
-              }`}
-              onLoad={() => setImgLoaded(true)}
-              onError={() => setImgError(true)}
-            />
-            {/* Gradient overlay */}
-            <div className="absolute inset-0 bg-gradient-to-t from-slate-900 via-slate-900/20 to-transparent pointer-events-none" />
-          </>
-        ) : (
-          <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 text-slate-500">
-            <svg className="w-10 h-10" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
-                d="M9 17.25v1.007a3 3 0 01-.879 2.122L7.5 21h9l-.621-.621A3 3 0 0115 18.257V17.25m6-12V15a2.25 2.25 0 01-2.25 2.25H5.25A2.25 2.25 0 013 15V5.25m18 0A2.25 2.25 0 0018.75 3H5.25A2.25 2.25 0 003 5.25m18 0H3" />
-            </svg>
-            <span className="text-xs">Enable Drive sharing to preview</span>
-            <span className="text-xs font-mono text-slate-600">{section.drawing}</span>
-          </div>
+      <div className="flex items-center gap-2">
+        <span className={cn("w-2 h-2 rounded-full shrink-0", meta.dot)} />
+        <div className="min-w-0">
+          <div className="text-sm font-semibold text-slate-200 truncate">{section.title}</div>
+          <div className="text-[11px] text-slate-500 truncate">{section.subtitle} · {section.drawing}</div>
+        </div>
+      </div>
+      <div className="mt-1.5 flex flex-wrap gap-1">
+        {section.equipment.slice(0, 4).map((tag) => (
+          <span key={tag} className="text-[10px] px-1.5 py-0.5 rounded bg-white/5 text-slate-400 border border-white/5">
+            {tag}
+          </span>
+        ))}
+        {section.equipment.length > 4 && (
+          <span className="text-[10px] px-1.5 py-0.5 rounded bg-white/5 text-slate-500 border border-white/5">
+            +{section.equipment.length - 4}
+          </span>
         )}
-
-        {/* Drawing number badge */}
-        <div className="absolute top-2 right-2 bg-slate-900/80 backdrop-blur-sm border border-slate-600/50 rounded-md px-2 py-0.5">
-          <span className="text-xs font-mono text-slate-300">{section.drawing}</span>
-        </div>
       </div>
-
-      {/* Card body */}
-      <div className="flex flex-col gap-2 p-4">
-        <div className="flex items-start justify-between gap-2">
-          <div>
-            <h3 className="font-semibold text-white leading-tight">{section.title}</h3>
-            <p className="text-sm text-slate-400">{section.subtitle}</p>
-          </div>
-          <CategoryBadge category={section.category} />
-        </div>
-
-        <p className="text-xs text-slate-500 line-clamp-2 leading-relaxed">{section.description}</p>
-
-        {/* Equipment tags */}
-        <div className="flex flex-wrap gap-1 mt-1">
-          {section.equipment.slice(0, 6).map((tag) => (
-            <span
-              key={tag}
-              className="font-mono text-[10px] text-amber-300/80 bg-amber-950/50 border border-amber-700/30 rounded px-1.5 py-0.5"
-            >
-              {tag}
-            </span>
-          ))}
-          {section.equipment.length > 6 && (
-            <span className="text-[10px] text-slate-500 self-center">
-              +{section.equipment.length - 6} more
-            </span>
-          )}
-        </div>
-      </div>
-
-      {/* Hover cue */}
-      <div className="absolute inset-0 ring-1 ring-inset ring-amber-400/0 group-hover:ring-amber-400/20 rounded-xl pointer-events-none transition-all" />
     </button>
   );
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Full-screen Lightbox Viewer
-// ─────────────────────────────────────────────────────────────────────────────
-
-interface LightboxProps {
-  sections: PIDSection[];
-  initialIndex: number;
-  onClose: () => void;
-}
-
-function Lightbox({ sections, initialIndex, onClose }: LightboxProps) {
-  const [idx, setIdx] = useState(initialIndex);
-  const [zoom, setZoom] = useState(1);
-  const [pan, setPan] = useState({ x: 0, y: 0 });
-  const [dragging, setDragging] = useState(false);
-  const dragStart = useRef({ x: 0, y: 0, panX: 0, panY: 0 });
-  const section = sections[idx];
-
-  const resetView = useCallback(() => {
-    setZoom(1);
-    setPan({ x: 0, y: 0 });
-  }, []);
-
-  const navigate = useCallback(
-    (dir: number) => {
-      setIdx((i) => Math.max(0, Math.min(sections.length - 1, i + dir)));
-      resetView();
-    },
-    [sections.length, resetView]
-  );
-
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-      if (e.key === "ArrowLeft") navigate(-1);
-      if (e.key === "ArrowRight") navigate(1);
-      if (e.key === "+" || e.key === "=") setZoom((z) => Math.min(z + 0.25, 4));
-      if (e.key === "-") setZoom((z) => Math.max(z - 0.25, 0.5));
-    };
-    window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
-  }, [onClose, navigate]);
-
-  const handleMouseDown = (e: React.MouseEvent) => {
-    if (zoom === 1) return;
-    setDragging(true);
-    dragStart.current = { x: e.clientX, y: e.clientY, panX: pan.x, panY: pan.y };
-  };
-  const handleMouseMove = (e: React.MouseEvent) => {
-    if (!dragging) return;
-    setPan({
-      x: dragStart.current.panX + (e.clientX - dragStart.current.x),
-      y: dragStart.current.panY + (e.clientY - dragStart.current.y),
-    });
-  };
-  const handleMouseUp = () => setDragging(false);
-
-  const handleWheel = (e: React.WheelEvent) => {
-    e.preventDefault();
-    setZoom((z) => Math.max(0.5, Math.min(4, z + (e.deltaY < 0 ? 0.15 : -0.15))));
-  };
+function ImageViewer({
+  section,
+  zoom,
+  onZoomIn,
+  onZoomOut,
+}: {
+  section: PIDSection;
+  zoom: number;
+  onZoomIn: () => void;
+  onZoomOut: () => void;
+}) {
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
+  const meta = CATEGORY_META[section.category];
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex flex-col bg-slate-950/95 backdrop-blur-sm"
-      role="dialog"
-      aria-modal
-      aria-label={`P&ID Viewer – ${section.title}`}
-    >
-      {/* ── Top Bar ── */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-slate-800 bg-slate-900/80 shrink-0">
-        <div className="flex items-center gap-3">
-          <span className="font-mono text-xs text-slate-500">{section.drawing}</span>
-          <span className="text-slate-600">|</span>
-          <h2 className="font-semibold text-white text-sm">
-            {section.title} — {section.subtitle}
-          </h2>
-          <CategoryBadge category={section.category} />
-        </div>
-
-        <div className="flex items-center gap-2">
-          {/* Zoom controls */}
-          <div className="flex items-center gap-1 bg-slate-800 rounded-lg px-2 py-1 border border-slate-700">
-            <button
-              onClick={() => setZoom((z) => Math.max(0.5, z - 0.25))}
-              className="text-slate-400 hover:text-white w-5 h-5 flex items-center justify-center text-base leading-none"
-              aria-label="Zoom out"
-            >−</button>
-            <span className="text-xs text-slate-300 font-mono w-10 text-center">
-              {Math.round(zoom * 100)}%
-            </span>
-            <button
-              onClick={() => setZoom((z) => Math.min(4, z + 0.25))}
-              className="text-slate-400 hover:text-white w-5 h-5 flex items-center justify-center text-base leading-none"
-              aria-label="Zoom in"
-            >+</button>
+    <div className="flex-1 flex flex-col min-w-0">
+      {/* Toolbar */}
+      <div className="flex items-center justify-between px-4 py-2 border-b border-white/10 bg-slate-900/50">
+        <div className="flex items-center gap-3 min-w-0">
+          <span className={cn("w-2.5 h-2.5 rounded-full shrink-0", meta.dot)} />
+          <div className="min-w-0">
+            <h2 className="text-sm font-bold text-white truncate">{section.title}</h2>
+            <p className="text-[11px] text-slate-400 truncate">
+              {section.drawing} {section.revision && `· Rev ${section.revision}`} · {section.unit}
+            </p>
           </div>
+        </div>
+        <div className="flex items-center gap-1 shrink-0">
           <button
-            onClick={resetView}
-            className="text-xs text-slate-400 hover:text-white bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1"
+            onClick={onZoomOut}
+            className="p-1.5 rounded-md bg-white/5 border border-white/10 text-slate-400 hover:text-white hover:bg-white/10 transition-colors"
           >
-            Reset
+            <ZoomOut size={14} />
           </button>
-
-          {/* Navigation */}
-          <span className="text-xs text-slate-500 ml-2 font-mono">
-            {idx + 1} / {sections.length}
-          </span>
+          <span className="text-xs text-slate-500 w-12 text-center">{Math.round(zoom * 100)}%</span>
           <button
-            onClick={() => navigate(-1)}
-            disabled={idx === 0}
-            className="w-8 h-8 flex items-center justify-center rounded-lg bg-slate-800 border border-slate-700 text-slate-300 hover:text-white disabled:opacity-30 transition-colors"
-            aria-label="Previous"
+            onClick={onZoomIn}
+            className="p-1.5 rounded-md bg-white/5 border border-white/10 text-slate-400 hover:text-white hover:bg-white/10 transition-colors"
           >
-            ‹
+            <ZoomIn size={14} />
           </button>
-          <button
-            onClick={() => navigate(1)}
-            disabled={idx === sections.length - 1}
-            className="w-8 h-8 flex items-center justify-center rounded-lg bg-slate-800 border border-slate-700 text-slate-300 hover:text-white disabled:opacity-30 transition-colors"
-            aria-label="Next"
+          <a
+            href={driveViewerUrl(section.fileId)}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="p-1.5 rounded-md bg-white/5 border border-white/10 text-slate-400 hover:text-white hover:bg-white/10 transition-colors ml-1"
+            title="Open in Google Drive"
           >
-            ›
-          </button>
-
-          <button
-            onClick={onClose}
-            className="w-8 h-8 flex items-center justify-center rounded-lg bg-slate-800 border border-slate-700 text-slate-400 hover:text-red-400 hover:border-red-700/50 transition-colors ml-1"
-            aria-label="Close"
-          >
-            ✕
-          </button>
+            <ExternalLink size={14} />
+          </a>
         </div>
       </div>
 
-      {/* ── Main canvas ── */}
-      <div
-        className="flex-1 overflow-hidden flex items-center justify-center relative"
-        style={{ cursor: zoom > 1 ? (dragging ? "grabbing" : "grab") : "default" }}
-        onMouseDown={handleMouseDown}
-        onMouseMove={handleMouseMove}
-        onMouseUp={handleMouseUp}
-        onMouseLeave={handleMouseUp}
-        onWheel={handleWheel}
-      >
-        <img
-          src={driveImageUrl(section.fileId, "w4000")}
-          alt={`P&ID – ${section.title}`}
-          draggable={false}
-          className="max-w-none select-none transition-transform duration-100"
-          style={{
-            transform: `scale(${zoom}) translate(${pan.x / zoom}px, ${pan.y / zoom}px)`,
-            transformOrigin: "center center",
-            maxHeight: "100%",
-            userSelect: "none",
-          }}
-        />
+      {/* Image canvas */}
+      <div className="flex-1 overflow-auto bg-slate-950 flex items-start justify-center p-4">
+        {section.fileId === "YOUR_FILE_ID_HERE" ? (
+          <div className="flex flex-col items-center justify-center h-full text-slate-500 gap-3">
+            <FileText size={48} className="opacity-30" />
+            <p className="text-sm">P&ID file not yet linked</p>
+            <p className="text-xs text-slate-600">Add the Google Drive file ID in pid-sections.ts</p>
+          </div>
+        ) : (
+          <div
+            className="relative transition-transform duration-150 ease-out"
+            style={{ transform: `scale(${zoom})`, transformOrigin: "top center" }}
+          >
+            {loading && (
+              <div className="absolute inset-0 flex items-center justify-center">
+                <div className="w-8 h-8 border-2 border-teal-500/30 border-t-teal-500 rounded-full animate-spin" />
+              </div>
+            )}
+            {error ? (
+              <div className="flex flex-col items-center justify-center p-8 text-slate-500 gap-2">
+                <Info size={24} />
+                <p className="text-sm">Failed to load image</p>
+                <p className="text-xs text-slate-600">Check Google Drive sharing permissions</p>
+              </div>
+            ) : (
+              <img
+                src={driveImageUrl(section.fileId, "w2000")}
+                alt={`${section.title} — ${section.drawing}`}
+                className="max-w-none rounded-lg border border-white/10 shadow-xl"
+                onLoad={() => setLoading(false)}
+                onError={() => { setLoading(false); setError(true); }}
+                draggable={false}
+              />
+            )}
+          </div>
+        )}
       </div>
 
-      {/* ── Bottom info strip ── */}
-      <div className="shrink-0 border-t border-slate-800 bg-slate-900/80 px-4 py-2 flex items-center gap-4 overflow-x-auto">
-        <span className="text-xs text-slate-500 whitespace-nowrap">Equipment on this drawing:</span>
-        {section.equipment.map((tag) => (
-          <span
-            key={tag}
-            className="font-mono text-[11px] text-amber-300 bg-amber-950/60 border border-amber-700/40 rounded px-2 py-0.5 whitespace-nowrap"
-          >
-            {tag}
-          </span>
-        ))}
-        <span className="ml-auto text-xs text-slate-600 whitespace-nowrap">
-          Use ← → to navigate · Scroll or +/− to zoom
-        </span>
+      {/* Info bar */}
+      <div className="px-4 py-2 border-t border-white/10 bg-slate-900/50 text-xs text-slate-400">
+        {section.description}
       </div>
     </div>
   );
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Main Page
-// ─────────────────────────────────────────────────────────────────────────────
-
-const CATEGORY_FILTERS: Array<{ id: PIDCategory | "all"; label: string }> = [
-  { id: "all", label: "All Sections" },
-  { id: "treatment", label: "Feed Treatment" },
-  { id: "pre-cooling", label: "Pre-cooling" },
-  { id: "liquefaction", label: "Liquefaction" },
-  { id: "fractionation", label: "Fractionation" },
-  { id: "utilities", label: "Utilities" },
-];
-
+// ─── Main component ───
 export default function PIDViewer() {
+  const navigate = useNavigate();
+  const { lang: rawLang } = useI18n();
+  const lang = rawLang?.startsWith("fr") ? "fr" : "en";
+
   const [search, setSearch] = useState("");
-  const [categoryFilter, setCategoryFilter] = useState<PIDCategory | "all">("all");
-  const [lightboxIdx, setLightboxIdx] = useState<number | null>(null);
+  const [activeId, setActiveId] = useState<string | null>(null);
+  const [zoom, setZoom] = useState(1);
+  const [unitFilter, setUnitFilter] = useState<string>("all");
+
   const equipmentIndex = useMemo(() => buildEquipmentIndex(), []);
 
-  // Filtered & sorted sections
+  const activeSection = useMemo(
+    () => PID_SECTIONS.find((s) => s.id === activeId) ?? null,
+    [activeId]
+  );
+
+  const units = useMemo(() => getUnits(), []);
+
   const filtered = useMemo(() => {
     const q = search.trim().toUpperCase();
     return PID_SECTIONS.filter((s) => {
-      const matchCat = categoryFilter === "all" || s.category === categoryFilter;
-      if (!matchCat) return false;
+      const matchUnit = unitFilter === "all" || s.unit === unitFilter;
+      if (!matchUnit) return false;
       if (!q) return true;
       return (
         s.title.toUpperCase().includes(q) ||
@@ -329,142 +211,175 @@ export default function PIDViewer() {
         s.description.toUpperCase().includes(q)
       );
     }).sort((a, b) => a.processOrder - b.processOrder);
-  }, [search, categoryFilter]);
+  }, [search, unitFilter]);
 
-  const handleCardClick = useCallback(
-    (section: PIDSection) => {
-      const idx = filtered.findIndex((s) => s.id === section.id);
-      if (idx !== -1) setLightboxIdx(idx);
-    },
-    [filtered]
+  const handlePrev = useCallback(() => {
+    if (!activeId) return;
+    const idx = filtered.findIndex((s) => s.id === activeId);
+    if (idx > 0) setActiveId(filtered[idx - 1].id);
+  }, [activeId, filtered]);
+
+  const handleNext = useCallback(() => {
+    if (!activeId) return;
+    const idx = filtered.findIndex((s) => s.id === activeId);
+    if (idx < filtered.length - 1) setActiveId(filtered[idx + 1].id);
+  }, [activeId, filtered]);
+
+  // Keyboard nav
+  useMemo(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "ArrowLeft") handlePrev();
+      if (e.key === "ArrowRight") handleNext();
+      if (e.key === "Escape") setActiveId(null);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [handlePrev, handleNext]);
+
+  const totalTags = useMemo(
+    () => new Set(PID_SECTIONS.flatMap((s) => s.equipment)).size,
+    []
   );
 
-  // Stats
-  const totalTags = useMemo(() => new Set(PID_SECTIONS.flatMap((s) => s.equipment)).size, []);
+  const linkedCount = PID_SECTIONS.filter((s) => s.fileId !== "YOUR_FILE_ID_HERE").length;
 
   return (
-    <div className="min-h-screen bg-slate-950 text-white">
-      {/* ── Header ── */}
-      <div className="border-b border-slate-800 bg-slate-900/50 sticky top-0 z-10 backdrop-blur-sm">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4 flex flex-col sm:flex-row sm:items-center gap-4">
-          <div className="flex-1">
-            <div className="flex items-center gap-2 mb-1">
-              {/* Process icon */}
-              <div className="w-7 h-7 rounded-lg bg-amber-500/10 border border-amber-500/30 flex items-center justify-center">
-                <svg className="w-4 h-4 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
-                    d="M3.75 3v11.25A2.25 2.25 0 006 16.5h2.25M3.75 3h-1.5m1.5 0h16.5m0 0h1.5m-1.5 0v11.25A2.25 2.25 0 0118 16.5h-2.25m-7.5 0h7.5m-7.5 0l-1 3m8.5-3l1 3m0 0l.5 1.5m-.5-1.5h-9.5m0 0l-.5 1.5M9 11.25v1.5M12 9v3.75m3-6v6" />
-                </svg>
-              </div>
-              <h1 className="text-lg font-bold text-white tracking-tight">P&amp;ID Browser</h1>
-              <span className="text-xs font-mono text-slate-500 bg-slate-800 border border-slate-700 rounded px-1.5 py-0.5">
-                GL1/Z — BECHTEL
-              </span>
-            </div>
-            <p className="text-sm text-slate-500">
-              {PID_SECTIONS.length} drawings · {totalTags} equipment tags
-            </p>
-          </div>
-
-          {/* Search */}
+    <div className="flex flex-col h-[calc(100vh-4rem)] gap-4">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 shrink-0">
+        <div>
+          <h1 className="text-xl font-bold text-white flex items-center gap-2">
+            <Layers size={20} className="text-amber-400" />
+            {lang === "en" ? "P&ID Browser" : "Navigateur P&ID"}
+          </h1>
+          <p className="text-slate-400 text-sm mt-1">
+            {PID_SECTIONS.length} {lang === "en" ? "drawings" : "dessins"} · {totalTags} {lang === "en" ? "equipment tags" : "tags équipement"} · {linkedCount} {lang === "en" ? "linked" : "liés"}
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
           <div className="relative">
-            <svg
-              className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500"
-              fill="none" stroke="currentColor" viewBox="0 0 24 24"
-            >
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 15.803a7.5 7.5 0 0010.607 10.607z" />
-            </svg>
+            <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-500" />
             <input
-              type="text"
-              placeholder="Search tag, title or drawing…"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="pl-10 pr-4 py-2 text-sm bg-slate-800 border border-slate-700 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-amber-400 focus:border-amber-400 w-72 transition-all"
+              placeholder={lang === "en" ? "Search drawing, tag, or number…" : "Rechercher dessin, tag, ou numéro…"}
+              className="pl-8 pr-8 py-1.5 rounded-lg bg-white/5 border border-white/10 text-sm text-white placeholder:text-slate-500 focus:outline-none focus:ring-1 focus:ring-amber-500 w-56"
             />
+            {search && (
+              <button
+                onClick={() => setSearch("")}
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-500 hover:text-white"
+              >
+                <X size={12} />
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Unit filter */}
+      <div className="flex flex-wrap gap-1.5 shrink-0">
+        <button
+          onClick={() => setUnitFilter("all")}
+          className={cn(
+            "px-3 py-1 rounded-full text-xs font-medium border transition-all",
+            unitFilter === "all"
+              ? "bg-amber-500/15 border-amber-500/30 text-amber-300"
+              : "bg-white/5 border-white/10 text-slate-400 hover:text-slate-200"
+          )}
+        >
+          {lang === "en" ? "All units" : "Toutes unités"}
+        </button>
+        {units.map((u) => (
+          <button
+            key={u}
+            onClick={() => setUnitFilter(unitFilter === u ? "all" : u)}
+            className={cn(
+              "px-3 py-1 rounded-full text-xs font-medium border transition-all",
+              unitFilter === u
+                ? "bg-amber-500/15 border-amber-500/30 text-amber-300"
+                : "bg-white/5 border-white/10 text-slate-400 hover:text-slate-200"
+            )}
+          >
+            {u}
+          </button>
+        ))}
+      </div>
+
+      {/* Main layout: sidebar + viewer */}
+      <div className="flex-1 flex gap-4 min-h-0">
+        {/* Sidebar list */}
+        <div className="w-72 shrink-0 flex flex-col gap-3 overflow-hidden">
+          <div className="text-xs text-slate-500 uppercase tracking-wider font-medium px-1">
+            {filtered.length} {lang === "en" ? "drawings" : "dessins"}
+          </div>
+          <div className="flex-1 overflow-y-auto space-y-2 pr-1">
+            {filtered.map((section) => (
+              <SectionCard
+                key={section.id}
+                section={section}
+                isActive={activeId === section.id}
+                onClick={() => {
+                  setActiveId(section.id);
+                  setZoom(1);
+                }}
+              />
+            ))}
+            {filtered.length === 0 && (
+              <div className="text-center py-8 text-slate-500 text-sm">
+                {lang === "en" ? "No P&IDs match your search." : "Aucun P&ID ne correspond."}
+              </div>
+            )}
           </div>
         </div>
 
-        {/* Category filter tabs */}
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 pb-3 flex items-center gap-2 overflow-x-auto scrollbar-none">
-          {CATEGORY_FILTERS.map(({ id, label }) => (
-            <button
-              key={id}
-              onClick={() => setCategoryFilter(id as PIDCategory | "all")}
-              className={`text-xs font-medium px-3 py-1.5 rounded-full border whitespace-nowrap transition-all ${
-                categoryFilter === id
-                  ? "bg-amber-500 border-amber-500 text-slate-900"
-                  : "bg-transparent border-slate-700 text-slate-400 hover:border-slate-500 hover:text-slate-200"
-              }`}
-            >
-              {label}
-            </button>
-          ))}
-          {search && (
-            <span className="text-xs text-slate-500 ml-2">
-              {filtered.length} result{filtered.length !== 1 ? "s" : ""}
-            </span>
+        {/* Viewer */}
+        <div className="flex-1 min-w-0 rounded-xl border border-white/10 bg-slate-900/40 overflow-hidden flex">
+          {activeSection ? (
+            <ImageViewer
+              section={activeSection}
+              zoom={zoom}
+              onZoomIn={() => setZoom((z) => Math.min(z * 1.2, 4))}
+              onZoomOut={() => setZoom((z) => Math.max(z / 1.2, 0.5))}
+            />
+          ) : (
+            <div className="flex-1 flex flex-col items-center justify-center text-slate-500 gap-4">
+              <Layers size={64} className="opacity-20" />
+              <p className="text-lg font-medium">
+                {lang === "en" ? "Select a P&ID from the sidebar" : "Sélectionnez un P&ID dans la liste"}
+              </p>
+              <p className="text-sm text-slate-600 max-w-md text-center">
+                {lang === "en"
+                  ? "Browse 44 process drawings organized by unit. Search by drawing number, equipment tag, or description."
+                  : "Parcourez 44 dessins de procédé organisés par unité. Recherchez par numéro de dessin, tag équipement, ou description."}
+              </p>
+            </div>
           )}
         </div>
       </div>
 
-      {/* ── Grid ── */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 py-8">
-        {filtered.length === 0 ? (
-          <div className="text-center py-24 text-slate-600">
-            <svg className="w-12 h-12 mx-auto mb-4 opacity-40" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
-                d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 15.803a7.5 7.5 0 0010.607 10.607z" />
-            </svg>
-            <p className="text-sm">No P&amp;ID sections match your search.</p>
-          </div>
-        ) : (
-          <>
-            {/* Group by unit when showing "All" */}
-            {categoryFilter === "all" && !search ? (
-              <div className="space-y-10">
-                {["Feed Gas Treatment", "Pre-cooling", "Liquefaction", "Fractionation Train", "Utilities"].map(
-                  (unit) => {
-                    const unitSections = filtered.filter((s) => s.unit === unit);
-                    if (unitSections.length === 0) return null;
-                    return (
-                      <div key={unit}>
-                        <div className="flex items-center gap-3 mb-4">
-                          <h2 className="text-sm font-semibold text-slate-300 uppercase tracking-widest">
-                            {unit}
-                          </h2>
-                          <div className="flex-1 h-px bg-slate-800" />
-                          <span className="text-xs text-slate-600">{unitSections.length} drawing{unitSections.length > 1 ? "s" : ""}</span>
-                        </div>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                          {unitSections.map((s) => (
-                            <PIDCard key={s.id} section={s} onClick={handleCardClick} />
-                          ))}
-                        </div>
-                      </div>
-                    );
-                  }
-                )}
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                {filtered.map((s) => (
-                  <PIDCard key={s.id} section={s} onClick={handleCardClick} />
-                ))}
-              </div>
-            )}
-          </>
-        )}
-      </div>
-
-      {/* ── Lightbox ── */}
-      {lightboxIdx !== null && (
-        <Lightbox
-          sections={filtered}
-          initialIndex={lightboxIdx}
-          onClose={() => setLightboxIdx(null)}
-        />
+      {/* Navigation footer */}
+      {activeSection && (
+        <div className="flex items-center justify-between shrink-0 px-1">
+          <button
+            onClick={handlePrev}
+            disabled={filtered.findIndex((s) => s.id === activeId) <= 0}
+            className="flex items-center gap-1 text-xs text-slate-400 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+          >
+            <ChevronLeft size={14} /> {lang === "en" ? "Previous" : "Précédent"}
+          </button>
+          <span className="text-xs text-slate-500">
+            {filtered.findIndex((s) => s.id === activeId) + 1} / {filtered.length}
+          </span>
+          <button
+            onClick={handleNext}
+            disabled={filtered.findIndex((s) => s.id === activeId) >= filtered.length - 1}
+            className="flex items-center gap-1 text-xs text-slate-400 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+          >
+            {lang === "en" ? "Next" : "Suivant"} <ChevronRight size={14} />
+          </button>
+        </div>
       )}
     </div>
   );
-}
+                              }
