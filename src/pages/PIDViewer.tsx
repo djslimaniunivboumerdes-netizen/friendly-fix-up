@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from "react";
+import React, { useState, useMemo, useCallback } from "react";
 import { useI18n } from "@/contexts/I18nContext";
 import { X, ZoomIn, ExternalLink, Search, Filter, ChevronRight, FileImage } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -692,4 +692,4 @@ export default function PIDViewer() {
       )}
     </div>
   );
-                }
+      }
