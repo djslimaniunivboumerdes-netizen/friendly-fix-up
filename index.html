@@ -35,7 +35,18 @@
   <meta property="og:description" content="Industrial Asset Management for the GNL1Z Sonatrach AP-C3MR™ liquefaction facility. Equipment master, spare parts, DCS directory, and operational manuals.">
   <meta name="twitter:description" content="Industrial Asset Management for the GNL1Z Sonatrach AP-C3MR™ liquefaction facility. Equipment master, spare parts, DCS directory, and operational manuals.">
 </head>
-
+<script>
+  window.addEventListener('error', function(e) {
+    document.body.innerHTML = '<div style="font-family:monospace;padding:20px;color:#ef4444;background:#0f172a;white-space:pre-wrap;word-break:break-all;">' +
+      '<h2>Runtime Error</h2>' +
+      '<p><b>Message:</b> ' + e.message + '</p>' +
+      '<p><b>File:</b> ' + (e.filename || 'unknown') + '</p>' +
+      '<p><b>Line:</b> ' + (e.lineno || '?') + '</p>' +
+      '<hr style="border-color:#334155;margin:15px 0;">' +
+      '<p><b>Stack:</b></p>' + (e.error?.stack || 'N/A') +
+      '</div>';
+  });
+</script>
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
