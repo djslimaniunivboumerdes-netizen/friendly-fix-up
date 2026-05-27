@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { ArrowRight, Database, Cpu, BookOpen, User, Info, Factory, Activity, Package, Workflow, Newspaper } from "lucide-react";
+import { ArrowRight, Database, Cpu, BookOpen, User, Info, Factory, Activity, Package, Workflow, Newspaper, FileText } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useI18n } from "@/contexts/I18nContext";
 import { META, EQUIPMENT } from "@/data";
@@ -10,6 +10,7 @@ const moduleCards = [
   { key: "equipment", to: "/equipment",  icon: Database,  accent: true,  descEn: "Searchable master of 77 equipment items with 713 spare parts and full technical files.",         descFr: "Maître recherchable de 77 équipements avec 713 pièces et dossiers techniques complets."          },
   { key: "dcs",       to: "/dcs",        icon: Cpu,       accent: false, descEn: "Instrument-to-panel mapping, loop diagrams and control narratives across all units.",            descFr: "Mapping instrument-vers-panneau, schémas de boucle et descriptifs de contrôle."                  },
   { key: "flow",      to: "/flow",       icon: Workflow,  accent: false, descEn: "Interactive AP-C3MR™ process diagram — from MEA decarbonation to LNG storage.",                  descFr: "Diagramme procédé AP-C3MR™ interactif — de la décarbonatation MEA au stockage GNL."            },
+  { key: "pid",       to: "/pid",        icon: FileText, accent: false, descEn: "28 P&ID sheets covering all process sections — CO₂ removal, dryer, propane, MCR, fractionation and utilities.",  descFr: "28 feuilles P&ID couvrant toutes les sections procédé — élimination CO₂, sécheur, propane, MCR, fractionnement et utilités." },
   { key: "news",      to: "/news",       icon: Newspaper, accent: false, descEn: "Live LNG market intelligence — spot prices, top 10 headlines and Sonatrach updates.",            descFr: "Intelligence marché GNL en direct — prix spot, top 10 actualités et mises à jour Sonatrach."   },
   { key: "manuals",   to: "/manuals",    icon: BookOpen,  accent: false, descEn: "Operational procedures in 23 documents (S01 → S15) covering all systems.",                       descFr: "Procédures opérationnelles en 23 documents (S01 → S15) couvrant tous les systèmes."             },
   { key: "author",    to: "/author",     icon: User,      accent: false, descEn: "Project author, credentials, ORCID, contact channels and mobile app downloads.",                 descFr: "Auteur du projet, références, ORCID, canaux de contact et téléchargements de l'application."  },
