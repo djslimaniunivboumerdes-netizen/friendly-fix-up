@@ -266,25 +266,6 @@ function TechInfoTab({ eq }: { eq: Equipment }) {
             : "Pressions d'épreuve calculées selon ASME VIII (1.43× pression de calcul × 1.3 hydrotest)."}
         </div>
       </div>
-      {/* P&ID button */}
-      <div className="border border-border rounded-lg bg-card p-5">
-        <div className="flex items-center justify-between gap-3 flex-wrap">
-          <div className="flex items-center gap-2">
-            <FileText className="h-4 w-4 text-accent" />
-            <h3 className="font-display font-semibold">P&ID</h3>
-          </div>
-          {eq.pid_drive_id ? (
-            <Button asChild className="bg-accent hover:bg-accent/90 text-accent-foreground gap-2">
-              <a href={`https://drive.google.com/file/d/${eq.pid_drive_id}/preview`} target="_blank" rel="noopener noreferrer">
-                <FileText className="h-4 w-4" /> {t("openPid")}
-                <ExternalLink className="h-3.5 w-3.5 ml-1" />
-              </a>
-            </Button>
-          ) : (
-            <Badge variant="outline" className="text-muted-foreground">{t("noPid")}</Badge>
-          )}
-        </div>
-      </div>
             {/* Isolation Plan button */}
       <div className="border border-border rounded-lg bg-card p-5">
         <div className="flex items-center justify-between gap-3 flex-wrap">
