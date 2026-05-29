@@ -51,10 +51,12 @@
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   <script>
+    // Manifest-only PWA: no service worker. Unregister any previously
+    // installed SW so devices stop serving stale cached builds.
     if ("serviceWorker" in navigator) {
-      window.addEventListener("load", () => {
-        navigator.serviceWorker.register("/sw.js").catch(() => {});
-      });
+      navigator.serviceWorker.getRegistrations().then((regs) => {
+        regs.forEach((r) => r.unregister());
+      }).catch(() => {});
     }
   </script>
   </body>

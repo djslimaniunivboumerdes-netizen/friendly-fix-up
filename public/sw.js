@@ -1,33 +1,25 @@
-// GNL1Z Service Worker — cache-first for static assets, network-first for API
-const CACHE = 'gnl1z-v1';
-const STATIC = ['/', '/index.html', '/manifest.json', '/favicon.ico', '/favicon-32x32.png', '/apple-touch-icon.png'];
-
-self.addEventListener('install', e => {
-  e.waitUntil(caches.open(CACHE).then(c => c.addAll(STATIC)).then(() => self.skipWaiting()));
-});
-self.addEventListener('activate', e => {
-  e.waitUntil(caches.keys().then(keys =>
-    Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k)))
-  ).then(() => self.clients.claim()));
-});
-self.addEventListener('fetch', e => {
-  const url = new URL(e.request.url);
-  // Network-first for Supabase API calls
-  if (url.hostname.includes('supabase.co')) {
-    e.respondWith(fetch(e.request).catch(() => caches.match(e.request)));
-    return;
-  }
-  // Cache-first for everything else (assets, pages)
-  e.respondWith(
-    caches.match(e.request).then(cached => {
-      if (cached) return cached;
-      return fetch(e.request).then(res => {
-        if (res.ok && e.request.method === 'GET') {
-          const clone = res.clone();
-          caches.open(CACHE).then(c => c.put(e.request, clone));
-        }
-        return res;
-      });
-    }).catch(() => caches.match('/index.html'))
-  );
-});
+// GNL1Z kill-switch service worker.
+// Replaces the previous cache-first SW which caused stale-build issues.
+// On activation: clears all caches, navigates open clients to a fresh URL,
+// then unregisters itself. Keep this file in place for at least one
+// release cycle so previously-installed clients get cleaned up.
+self.addEventListener('install', (e) => e.waitUntil(self.skipWaiting()));
+self.addEventListener('activate', (e) =>
+  e.waitUntil(
+    (async () => {
+      await self.clients.claim();
+      const names = await caches.keys();
+      await Promise.all(names.map((n) => caches.delete(n)));
+      const clients = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+      await Promise.all(
+        clients.map((c) => {
+          const url = new URL(c.url);
+          url.searchParams.set('sw-cleanup', Date.now().toString());
+          return c.navigate(url.toString()).catch(() => {});
+        })
+      );
+      await self.registration.unregister();
+    })()
+  )
+);
+// No fetch handler — requests pass through to the network.
