@@ -14,8 +14,6 @@ export const DCS_TO_EQUIPMENT_MAP: Record<string, string | null> = {
   "102-G07.85": "X02-G-07.85",
   "102-R03.10": "X02-R-03.10",
   "102-R03.12": "X02-R-03.12",
-  "101-G-507": "X01-G-507",
-  "102-G07.87": "X02-G-07.87",
 
   // Liquefaction
   "X06-E-05.30": "X06-E-05.30",
