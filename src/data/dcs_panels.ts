@@ -139,4 +139,14 @@ export const DCS_PANELS: DCSPanel[] = [
   }
 ];
 
+// Explicitly extract unique section names for the filter UI
+export const DCS_SECTIONS = Array.from(
+  new Set(DCS_PANELS.map(panel => panel.section))
+);
+
+// Helper function to find a single panel by its unique ID
+export const getDcsPanel = (id: string) => {
+  return DCS_PANELS.find(panel => panel.id === id);
+};
+
 export default DCS_PANELS;
