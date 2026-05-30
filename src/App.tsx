@@ -15,6 +15,7 @@ import DcsDirectory from "./pages/DcsDirectory";
 import DcsDetail from "./pages/DcsDetail";
 import Manuals from "./pages/Manuals";
 import ProcessFlow from "./pages/ProcessFlow";
+import SmartFlow from './pages/SmartFlow";
 import News from "./pages/News";
 import Author from "./pages/Author";
 import DownloadPage from "./pages/DownloadPage";
@@ -44,6 +45,7 @@ const App = () => (
                   <Route path="/dcs/:id" element={<DcsDetail />} />
                   <Route path="/manuals" element={<Manuals />} />
                   <Route path="/flow" element={<ProcessFlow />} />
+                  <Route path="/smart-flow" element={<SmartFlow />} />
                   <Route path="/news" element={<News />} />
                   <Route path="/author" element={<Author />} />
                   <Route path="/auth" element={<Auth />} />
