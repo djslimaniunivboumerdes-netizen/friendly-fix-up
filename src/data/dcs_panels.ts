@@ -13,8 +13,7 @@ export interface DCSPanel {
     [key: string]: string | number;
   };
 }
-
-export const dcsPanels: DCSPanel[] = [
+export const DCS_PANELS: DCSPanel[] = [
   // 1. PRETREATMENT / MEA CO2 REMOVAL
   {
     id: 'dcs-101',
@@ -140,4 +139,4 @@ export const dcsPanels: DCSPanel[] = [
   }
 ];
 
-export default dcsPanels;
+export default DCS_PANELS;
